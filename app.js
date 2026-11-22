@@ -1321,7 +1321,8 @@
 
     if (secondaryBtn) {
       secondaryBtn.hidden = !secondaryLabel;
-      secondaryBtn.textContent = secondaryLabel;
+      secondaryBtn.style.display = secondaryLabel ? "" : "none";
+      secondaryBtn.textContent = secondaryLabel || "";
       secondaryBtn.classList.toggle("button-danger", secondaryDestructive);
     }
 
