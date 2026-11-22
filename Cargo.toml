@@ -1,0 +1,13 @@
+[package]
+name = "gather"
+version = "1.0.0"
+edition = "2021"
+description = "Gather — Personal Moment & Event Tracker"
+authors = ["Yuvraj Rode"]
+
+[dependencies]
+tao = "0.37.2"
+wry = "0.57.2"
+
+[build-dependencies]
+winres = "0.1.12"
