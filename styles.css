@@ -357,6 +357,91 @@ kbd {
 .profile-copy strong { font-weight: 700; color: var(--ink); }
 .profile-copy span { color: var(--muted); font-size: 10px; }
 
+.sidebar-version-wrap {
+  margin-top: 8px;
+  padding: 6px 4px 2px;
+  border-top: 1px solid var(--border);
+}
+.version-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.version-pill {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+.check-update-btn {
+  background: transparent;
+  border: 0;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.check-update-btn:hover {
+  color: var(--brand);
+  background: var(--brand-light);
+}
+
+.update-notification {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+  animation: fadeIn 0.3s ease;
+}
+.update-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseGreen 1.8s infinite;
+  flex-shrink: 0;
+}
+@keyframes pulseGreen {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.update-text {
+  font-size: 10px;
+  font-weight: 600;
+  color: #10b981;
+  flex: 1;
+}
+.update-apply-btn {
+  background: #10b981;
+  color: #fff;
+  border: 0;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.update-apply-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.04);
+}
+
 /* TAB VIEWS */
 .tab-view {
   display: block;
