@@ -438,17 +438,25 @@
     if (inst) inst.sync();
   }
 
+  const CATEGORY_PALETTE = [
+    "#6366f1", "#ec4899", "#10b981", "#f97316", "#eab308", "#06b6d4",
+    "#8b5cf6", "#14b8a6", "#f43f5e", "#3b82f6", "#84cc16", "#a855f7"
+  ];
+
   function renderCategoryControls() {
     const counts = Object.fromEntries(
       categories.map(({ name }) => [name, events.filter((e) => e.category === name).length])
     );
 
     els.categoryNav.innerHTML = categories.map((cat) => `
-      <a href="#events" class="category-link ${activeCategory === cat.name ? "selected" : ""}" data-category="${escapeHtml(cat.name)}">
-        <span class="category-color" style="background:${escapeHtml(cat.color)}"></span>
-        <span>${escapeHtml(cat.name)}</span>
-        <span class="category-link-count">${counts[cat.name] || ""}</span>
-      </a>`).join("");
+      <div class="category-item-row ${activeCategory === cat.name ? "selected" : ""}">
+        <a href="#events" class="category-link" data-category="${escapeHtml(cat.name)}">
+          <span class="category-color" style="background:${escapeHtml(cat.color)}"></span>
+          <span>${escapeHtml(cat.name)}</span>
+          <span class="category-link-count">${counts[cat.name] || ""}</span>
+        </a>
+        <button type="button" class="category-edit-btn" data-edit-category="${escapeHtml(cat.name)}" title="Category settings" aria-label="Settings for ${escapeHtml(cat.name)}">⚙</button>
+      </div>`).join("");
 
     const prevFilter = els.categoryFilter.value || activeCategory;
     els.categoryFilter.innerHTML = `<option value="all">All categories</option>` + categories.map((cat) =>
@@ -566,13 +574,40 @@
 
     const today = dateFromISO(todayStr);
     const date = dateFromISO(dateStr);
-    const diff = Math.floor((today - date) / (1000 * 60 * 60 * 24));
+    const msPerDay = 86400000;
+    const utcToday = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const utcDate = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    const diff = Math.round((utcToday - utcDate) / msPerDay);
 
     if (diff === 1) return "Yesterday";
     if (diff > 1 && diff <= 7) return "This Past Week";
     if (diff > 7 && diff <= 30) return "Earlier This Month";
 
     return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(date);
+  }
+
+  function mergeEvents(existingEvents, incomingEvents) {
+    const map = new Map();
+    (Array.isArray(existingEvents) ? existingEvents : []).forEach((e) => {
+      const norm = normalizeEvent(e);
+      map.set(norm.id, norm);
+    });
+
+    (Array.isArray(incomingEvents) ? incomingEvents : []).forEach((e) => {
+      const norm = normalizeEvent(e);
+      map.set(norm.id, norm);
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  }
+
+  function reassignCategoryEvents(eventsList, oldCategoryName, fallbackName = "Personal") {
+    return (Array.isArray(eventsList) ? eventsList : []).map((e) => {
+      if (e.category === oldCategoryName) {
+        return { ...e, category: fallbackName };
+      }
+      return e;
+    });
   }
 
   function renderEvents() {
@@ -1007,9 +1042,27 @@
     if (res) res(val);
   }
 
-  function showCustomDialog({ title, message, inputLabel = "", inputPlaceholder = "", confirmLabel = "Confirm", destructive = false }) {
+  let customDialogSelectedColor = null;
+
+  function showCustomDialog({
+    title,
+    message,
+    inputLabel = "",
+    inputPlaceholder = "",
+    inputValue = "",
+    confirmLabel = "Confirm",
+    secondaryLabel = "",
+    secondaryDestructive = false,
+    destructive = false,
+    colors = null,
+    selectedColor = null
+  }) {
     const backdrop = $("#custom-dialog-backdrop");
     const input = $("#custom-dialog-input");
+    const secondaryBtn = $("#custom-dialog-secondary");
+    const colorsWrap = $("#custom-dialog-colors");
+    const swatchesEl = $("#color-swatches");
+
     $("#custom-dialog-title").textContent = title;
     $("#custom-dialog-message").textContent = message;
     $("#custom-dialog-confirm").textContent = confirmLabel;
@@ -1018,9 +1071,27 @@
     $("#custom-dialog-input-label").textContent = inputLabel;
     $("#custom-dialog-input-label").hidden = !inputLabel;
     $("#custom-dialog-error").hidden = true;
+
+    if (secondaryBtn) {
+      secondaryBtn.hidden = !secondaryLabel;
+      secondaryBtn.textContent = secondaryLabel;
+      secondaryBtn.classList.toggle("button-danger", secondaryDestructive);
+    }
+
     input.hidden = !inputLabel;
-    input.value = "";
+    input.value = inputValue || "";
     input.placeholder = inputPlaceholder;
+
+    customDialogSelectedColor = selectedColor || (colors ? colors[0] : null);
+    if (colorsWrap && swatchesEl) {
+      colorsWrap.hidden = !colors;
+      if (colors) {
+        swatchesEl.innerHTML = colors.map((col) => `
+          <button type="button" class="color-swatch ${col === customDialogSelectedColor ? "selected" : ""}" data-color="${col}" style="background:${col}" aria-label="Color ${col}"></button>
+        `).join("");
+      }
+    }
+
     backdrop.hidden = false;
     document.body.style.overflow = "hidden";
 
@@ -1074,24 +1145,28 @@
     showToast(`Welcome to ${username}! ✳`);
   });
 
-  // LISTENERS
-  $("#open-event-modal").addEventListener("click", () => openModal());
-  $("#theme-toggle").addEventListener("click", toggleTheme);
-
-  $("#export-button").addEventListener("click", () => {
+  function exportData(isAutoBackup = false) {
     const backup = { format: "gather-events", version: 1, exportedAt: new Date().toISOString(), categories, events };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `gather-events-${localDateString()}.json`;
+    link.download = isAutoBackup
+      ? `gather-backup-before-replace-${localDateString()}.json`
+      : `gather-events-${localDateString()}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast("Events exported to JSON.");
-  });
+    if (!isAutoBackup) showToast("Events exported to JSON.");
+  }
 
-  $("#import-button").addEventListener("click", () => $("#import-file").click());
-  $("#import-file").addEventListener("change", async (e) => {
+  // LISTENERS
+  $("#open-event-modal")?.addEventListener("click", () => openModal());
+  $("#theme-toggle")?.addEventListener("click", toggleTheme);
+
+  $("#export-button")?.addEventListener("click", () => exportData(false));
+
+  $("#import-button")?.addEventListener("click", () => $("#import-file")?.click());
+  $("#import-file")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
@@ -1100,16 +1175,54 @@
       const incoming = Array.isArray(parsed) ? parsed : parsed.events || [];
       if (!Array.isArray(incoming)) throw new Error("Invalid file structure");
 
-      events = incoming.map(normalizeEvent);
-      if (Array.isArray(parsed.categories) && parsed.categories.length) {
-        categories = parsed.categories;
+      if (events.length > 0) {
+        const choice = await showCustomDialog({
+          title: "Import Moments",
+          message: `Found ${incoming.length} moments in file. You currently have ${events.length} saved. How would you like to proceed?`,
+          confirmLabel: "Merge (Keep Both)",
+          secondaryLabel: "Replace All",
+          secondaryDestructive: true
+        });
+
+        if (!choice) {
+          e.target.value = "";
+          return;
+        }
+
+        if (choice === "secondary") {
+          exportData(true);
+          events = incoming.map(normalizeEvent);
+          if (Array.isArray(parsed.categories) && parsed.categories.length) {
+            categories = parsed.categories;
+          }
+          saveData();
+          render();
+          showToast(`Replaced with ${events.length} imported moments (backup saved).`);
+        } else {
+          events = mergeEvents(events, incoming);
+          if (Array.isArray(parsed.categories)) {
+            parsed.categories.forEach((c) => {
+              if (c && c.name && !categories.some((ex) => ex.name.toLowerCase() === c.name.toLowerCase())) {
+                categories.push(c);
+              }
+            });
+          }
+          saveData();
+          render();
+          showToast(`Merged successfully! Total moments: ${events.length}.`);
+        }
+      } else {
+        events = incoming.map(normalizeEvent);
+        if (Array.isArray(parsed.categories) && parsed.categories.length) {
+          categories = parsed.categories;
+        }
+        saveData();
+        render();
+        showToast(`${events.length} events imported.`);
       }
-      saveData();
-      render();
-      showToast(`${events.length} events imported.`);
     } catch (err) {
       console.error(err);
-      showToast("Could not import file.");
+      showToast("Could not import file: Invalid JSON structure.");
     }
     e.target.value = "";
   });
@@ -1167,7 +1280,81 @@
     showToast(existing ? "Event updated." : "Event logged! ✳");
   });
 
-  els.categoryNav.addEventListener("click", (e) => {
+  els.categoryNav.addEventListener("click", async (e) => {
+    const editBtn = e.target.closest("[data-edit-category]");
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const catName = editBtn.dataset.editCategory;
+      const cat = categories.find((c) => c.name === catName);
+      if (!cat) return;
+
+      const isPersonal = cat.name === "Personal";
+      const affectedCount = events.filter((ev) => ev.category === cat.name).length;
+
+      const result = await showCustomDialog({
+        title: `Edit Category: ${cat.name}`,
+        message: isPersonal
+          ? "Default category name and color can be updated:"
+          : `Customize name and color, or delete (${affectedCount} moments in this category):`,
+        inputLabel: "Category name",
+        inputValue: cat.name,
+        confirmLabel: "Save changes",
+        secondaryLabel: isPersonal ? "" : "Delete Category",
+        secondaryDestructive: true,
+        colors: CATEGORY_PALETTE,
+        selectedColor: cat.color
+      });
+
+      if (!result) return;
+
+      if (result === "secondary" && !isPersonal) {
+        const confirmDelete = await showCustomDialog({
+          title: `Delete category "${cat.name}"?`,
+          message: affectedCount > 0
+            ? `${affectedCount} moments currently in "${cat.name}" will be safely reassigned to "Personal".`
+            : `Are you sure you want to delete "${cat.name}"?`,
+          confirmLabel: "Delete category",
+          destructive: true
+        });
+
+        if (!confirmDelete) return;
+
+        events = reassignCategoryEvents(events, cat.name, "Personal");
+        categories = categories.filter((c) => c.name !== cat.name);
+        if (activeCategory === cat.name) activeCategory = "all";
+        saveData();
+        render();
+        showToast(`Category "${cat.name}" deleted.`);
+        return;
+      }
+
+      if (typeof result === "object" && result.value) {
+        const newName = result.value.trim();
+        const newColor = result.color || cat.color;
+
+        if (newName.toLowerCase() !== cat.name.toLowerCase() && categories.some((c) => c.name.toLowerCase() === newName.toLowerCase())) {
+          showToast("A category with that name already exists.");
+          return;
+        }
+
+        const oldName = cat.name;
+        cat.name = newName;
+        cat.color = newColor;
+        cat.tint = `${newColor}18`;
+
+        if (oldName !== newName) {
+          events = events.map((ev) => ev.category === oldName ? { ...ev, category: newName } : ev);
+          if (activeCategory === oldName) activeCategory = newName;
+        }
+
+        saveData();
+        render();
+        showToast("Category updated.");
+      }
+      return;
+    }
+
     const link = e.target.closest("[data-category]");
     if (!link) return;
     e.preventDefault();
@@ -1216,29 +1403,41 @@
   });
 
   $("#add-category-button")?.addEventListener("click", async () => {
-    const name = await showCustomDialog({
+    const result = await showCustomDialog({
       title: "Add Category",
-      message: "Enter a category name:",
+      message: "Enter a category name and pick a color:",
       inputLabel: "Category name",
-      inputPlaceholder: "e.g. Hobbies, Health",
-      confirmLabel: "Add"
+      inputPlaceholder: "e.g. Hobbies, Health, Reading",
+      confirmLabel: "Add Category",
+      colors: CATEGORY_PALETTE,
+      selectedColor: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length]
     });
-    if (!name) return;
-    const trimmed = name.trim();
+    if (!result || typeof result !== "object") return;
+    const trimmed = result.value ? result.value.trim() : "";
     if (!trimmed || trimmed.length > 30) return;
     if (categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
       showToast("That category already exists.");
       return;
     }
-    const palette = ["#6366f1", "#ec4899", "#10b981", "#f97316", "#eab308", "#06b6d4"];
-    const color = palette[categories.length % palette.length];
+    const color = result.color || CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length];
     categories.push({ name: trimmed, color, icon: "✦", tint: `${color}18` });
     saveData();
     render();
-    showToast(`Category "${trimmed}" added.`);
+    showToast(`Category "${trimmed}" added! ✳`);
   });
 
-  $("#custom-dialog-confirm").addEventListener("click", () => {
+  $("#color-swatches")?.addEventListener("click", (e) => {
+    const swatch = e.target.closest("[data-color]");
+    if (!swatch) return;
+    customDialogSelectedColor = swatch.dataset.color;
+    $$(".color-swatch").forEach((s) => s.classList.toggle("selected", s.dataset.color === customDialogSelectedColor));
+  });
+
+  $("#custom-dialog-secondary")?.addEventListener("click", () => {
+    resolveCustomDialog("secondary");
+  });
+
+  $("#custom-dialog-confirm")?.addEventListener("click", () => {
     const input = $("#custom-dialog-input");
     if (!input.hidden && !input.value.trim()) {
       $("#custom-dialog-error").textContent = "Please enter a value.";
@@ -1246,11 +1445,18 @@
       input.focus();
       return;
     }
-    resolveCustomDialog(input.hidden ? true : input.value.trim());
+    if (input.hidden) {
+      resolveCustomDialog(true);
+    } else {
+      resolveCustomDialog({
+        value: input.value.trim(),
+        color: customDialogSelectedColor
+      });
+    }
   });
-  $("#custom-dialog-cancel").addEventListener("click", closeCustomDialog);
-  $("#custom-dialog-close").addEventListener("click", closeCustomDialog);
-  $("#custom-dialog-backdrop").addEventListener("click", (e) => {
+  $("#custom-dialog-cancel")?.addEventListener("click", closeCustomDialog);
+  $("#custom-dialog-close")?.addEventListener("click", closeCustomDialog);
+  $("#custom-dialog-backdrop")?.addEventListener("click", (e) => {
     if (e.target === $("#custom-dialog-backdrop")) closeCustomDialog();
   });
 
@@ -1332,6 +1538,8 @@
       renderImpactBadge,
       calculateStreak,
       getTimelineGroup,
+      mergeEvents,
+      reassignCategoryEvents,
       escapeHtml
     };
   }

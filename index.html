@@ -389,9 +389,14 @@
         <p class="custom-dialog-message" id="custom-dialog-message"></p>
         <label class="field-label custom-dialog-input-label" id="custom-dialog-input-label" for="custom-dialog-input"></label>
         <input class="text-input custom-dialog-input" id="custom-dialog-input" maxlength="30" />
+        <div class="custom-dialog-colors" id="custom-dialog-colors" hidden>
+          <span class="field-label">Choose color:</span>
+          <div class="color-swatches" id="color-swatches"></div>
+        </div>
         <p class="custom-dialog-error" id="custom-dialog-error" role="alert" hidden></p>
         <div class="modal-actions">
           <button class="button button-quiet" id="custom-dialog-cancel" type="button">Cancel</button>
+          <button class="button button-quiet" id="custom-dialog-secondary" type="button" hidden>Secondary</button>
           <button class="button button-primary" id="custom-dialog-confirm" type="button">Confirm</button>
         </div>
       </section>
