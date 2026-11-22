@@ -21,11 +21,11 @@
   };
 
   const IMPACTS = {
-    1: { level: 1, label: "Minor", hint: "Small routine win or slight annoyance", dots: "●○○○○" },
-    2: { level: 2, label: "Noticeable", hint: "Notable moment in your day", dots: "●●○○○" },
-    3: { level: 3, label: "Moderate", hint: "Meaningful milestone or test", dots: "●●●○○" },
-    4: { level: 4, label: "Significant", hint: "High-impact achievement or event", dots: "●●●●○" },
-    5: { level: 5, label: "Major", hint: "Life-changing or unforgettable moment", dots: "●●●●●" }
+    1: { level: 1, label: "Minor", hint: "Routine", dots: "●○○○○" },
+    2: { level: 2, label: "Noticeable", hint: "Notable", dots: "●●○○○" },
+    3: { level: 3, label: "Moderate", hint: "Meaningful", dots: "●●●○○" },
+    4: { level: 4, label: "Significant", hint: "High impact", dots: "●●●●○" },
+    5: { level: 5, label: "Major", hint: "Life milestone", dots: "●●●●●" }
   };
 
   const DEFAULT_CATEGORIES = [
@@ -151,9 +151,9 @@
     const parsed = Number(impact);
     const val = Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 3;
     const def = IMPACTS[val] || IMPACTS[3];
-    return `<span class="event-impact impact-${val}" title="Impact: ${val}/5 (${def.label}) — ${def.hint}">
+    return `<span class="event-impact impact-${val}" title="Impact: ${val}/5 · ${def.label}">
       <span class="impact-dots" aria-hidden="true">${def.dots}</span>
-      <span class="impact-text">Impact ${val}/5 · ${def.label}</span>
+      <span class="impact-text">${def.label}</span>
     </span>`;
   }
 
@@ -1145,7 +1145,7 @@
     els.impactPicker.innerHTML = Object.values(IMPACTS).map((imp) => {
       const isSel = selectedImpact === imp.level;
       return `
-        <button type="button" class="impact-option ${isSel ? "selected" : ""}" data-impact="${imp.level}" role="radio" aria-checked="${String(isSel)}" title="Level ${imp.level}: ${imp.label} — ${imp.hint}">
+        <button type="button" class="impact-option ${isSel ? "selected" : ""}" data-impact="${imp.level}" role="radio" aria-checked="${String(isSel)}" title="Level ${imp.level} · ${imp.label}">
           <span class="impact-num">${imp.level}</span>
           <span class="impact-name">${escapeHtml(imp.label)}</span>
           <span class="impact-dots-mini">${escapeHtml(imp.dots)}</span>
@@ -1154,7 +1154,7 @@
 
     if (els.modalImpactDesc) {
       const def = IMPACTS[selectedImpact] || IMPACTS[3];
-      els.modalImpactDesc.textContent = `Level ${selectedImpact}: ${def.label} · ${def.hint}`;
+      els.modalImpactDesc.textContent = `Level ${selectedImpact} · ${def.label}`;
     }
   }
 
