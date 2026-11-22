@@ -1,6 +1,6 @@
 [package]
 name = "gather"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Gather — Personal Moment & Event Tracker"
 authors = ["Yuvraj Rode"]
@@ -8,6 +8,7 @@ authors = ["Yuvraj Rode"]
 [dependencies]
 tao = "0.37.2"
 wry = "0.57.2"
+tiny_http = "0.12.0"
 
 [build-dependencies]
 winres = "0.1.12"

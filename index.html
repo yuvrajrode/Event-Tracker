@@ -431,18 +431,5 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
-    <script>
-      // Clear any legacy service workers/caches to ensure real-time local updates
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) => {
-          for (const reg of regs) reg.unregister();
-        });
-      }
-      if ("caches" in window) {
-        caches.keys().then((keys) => {
-          for (const k of keys) caches.delete(k);
-        });
-      }
-    </script>
   </body>
 </html>
