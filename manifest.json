@@ -1,0 +1,17 @@
+{
+  "name": "Gather — Personal Moment & Event Tracker",
+  "short_name": "Gather",
+  "description": "Log, reflect, and uncover patterns in your life moments with sentiment & impact tracking.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d0e15",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
