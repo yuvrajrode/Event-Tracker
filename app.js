@@ -327,24 +327,88 @@
     }
   }
 
-  function calculateStreak() {
-    if (!events.length) return 0;
-    const dateSet = new Set(events.map((e) => e.date));
+  function calculateStreaks(eventsList = events) {
+    if (!eventsList || !eventsList.length) return { current: 0, longest: 0 };
+    const dateSet = new Set(eventsList.map((e) => e.date).filter(Boolean));
+    if (!dateSet.size) return { current: 0, longest: 0 };
+
+    const sortedDates = Array.from(dateSet).sort();
+    let longest = 0;
+    let tempStreak = 0;
+    let prevUtc = null;
+    const msPerDay = 86400000;
+
+    for (const dStr of sortedDates) {
+      const d = dateFromISO(dStr);
+      const utc = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+      if (prevUtc === null) {
+        tempStreak = 1;
+      } else {
+        const diff = Math.round((utc - prevUtc) / msPerDay);
+        if (diff === 1) {
+          tempStreak += 1;
+        } else if (diff > 1) {
+          tempStreak = 1;
+        }
+      }
+      prevUtc = utc;
+      if (tempStreak > longest) longest = tempStreak;
+    }
+
     const today = new Date();
-    let current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayStr = localDateString(current);
+    let currentWalk = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayStr = localDateString(currentWalk);
 
     if (!dateSet.has(todayStr)) {
-      current.setDate(current.getDate() - 1);
-      if (!dateSet.has(localDateString(current))) return 0;
+      currentWalk.setDate(currentWalk.getDate() - 1);
+      if (!dateSet.has(localDateString(currentWalk))) {
+        return { current: 0, longest };
+      }
     }
 
-    let streak = 0;
-    while (dateSet.has(localDateString(current))) {
-      streak += 1;
-      current.setDate(current.getDate() - 1);
+    let current = 0;
+    while (dateSet.has(localDateString(currentWalk))) {
+      current += 1;
+      currentWalk.setDate(currentWalk.getDate() - 1);
     }
-    return streak;
+
+    return { current, longest: Math.max(longest, current) };
+  }
+
+  function calculateStreak() {
+    return calculateStreaks(events).current;
+  }
+
+  function calculateAverageImpact(eventsList = events) {
+    if (!eventsList || !eventsList.length) return "—";
+    const sum = eventsList.reduce((acc, e) => {
+      const parsed = Number(e.impact);
+      const val = Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 3;
+      return acc + val;
+    }, 0);
+    return (sum / eventsList.length).toFixed(1);
+  }
+
+  function get30DayChartBuckets(eventsList = events, referenceDate = new Date()) {
+    const buckets = [];
+    const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - i);
+      const dateStr = localDateString(d);
+      const dayEvents = (eventsList || []).filter((e) => e.date === dateStr);
+      buckets.push({
+        date: d,
+        dateStr,
+        label: `${d.getDate()} ${formatMonth(d)}`,
+        count: dayEvents.length,
+        good: dayEvents.filter((e) => e.sentiment === "good").length,
+        normal: dayEvents.filter((e) => e.sentiment === "normal").length,
+        bad: dayEvents.filter((e) => e.sentiment === "bad").length
+      });
+    }
+
+    return buckets;
   }
 
   // CUSTOM DROPDOWNS SYSTEM (Replaces ugly native OS select popup)
@@ -539,12 +603,13 @@
 
   function renderStats() {
     const total = events.length;
-    const streak = calculateStreak();
+    const streaks = calculateStreaks(events);
     const streakEl = $("#streak-value");
     const streakLabelEl = $("#streak-label");
-    if (streakEl) streakEl.innerHTML = `${streak} <small>days</small>`;
+    if (streakEl) streakEl.innerHTML = `${streaks.current} <small>days</small>`;
     if (streakLabelEl) {
-      streakLabelEl.textContent = streak > 0 ? "🔥 Active daily streak" : "Start logging to build streak";
+      const activeText = streaks.current > 0 ? "🔥 Active streak" : "Start logging to build streak";
+      streakLabelEl.textContent = streaks.longest > 0 ? `Best: ${streaks.longest}d · ${activeText}` : activeText;
     }
 
     $("#total-events").textContent = total;
@@ -552,6 +617,8 @@
     const goodCount = events.filter((e) => e.sentiment === "good").length;
     const normalCount = events.filter((e) => e.sentiment === "normal").length;
     const badCount = events.filter((e) => e.sentiment === "bad").length;
+    const avgImpact = calculateAverageImpact(events);
+    const highImpactCount = events.filter((e) => Number(e.impact) >= 4).length;
 
     const splitGood = $("#split-good");
     const splitNormal = $("#split-normal");
@@ -566,8 +633,8 @@
       if (splitNormal) splitNormal.style.width = `${normalPct}%`;
       if (splitBad) splitBad.style.width = `${badPct}%`;
 
-      $("#average-rating").textContent = `${goodPct}% positive`;
-      $("#sentiment-summary").textContent = `${goodCount} Good · ${normalCount} Normal · ${badCount} Tough`;
+      $("#average-rating").textContent = `${goodPct}% positive · ${avgImpact}★ impact`;
+      $("#sentiment-summary").textContent = `${goodCount} Good · ${normalCount} Normal · ${badCount} Tough · ${highImpactCount} Major`;
     } else {
       if (splitGood) splitGood.style.width = "0%";
       if (splitNormal) splitNormal.style.width = "0%";
@@ -781,51 +848,75 @@
   }
 
   function renderChart() {
-    const numberOfMonths = Number($("#chart-period").value) || 6;
+    const periodValue = $("#chart-period") ? $("#chart-period").value : "6";
+    const is30Days = periodValue === "30";
     const now = new Date();
-    const months = Array.from({ length: numberOfMonths }, (_, i) =>
-      new Date(now.getFullYear(), now.getMonth() - numberOfMonths + i + 1, 1)
-    );
 
-    const monthData = months.map((month) => {
-      const mEvents = events.filter((e) => {
-        const d = dateFromISO(e.date);
-        return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
-      });
-      return {
-        month,
-        count: mEvents.length,
-        good: mEvents.filter((e) => e.sentiment === "good").length,
-        normal: mEvents.filter((e) => e.sentiment === "normal").length,
-        bad: mEvents.filter((e) => e.sentiment === "bad").length
-      };
-    });
-
-    const counts = monthData.map((d) => d.count);
-    const totalCount = counts.reduce((acc, c) => acc + c, 0);
-    const avgCount = (totalCount / numberOfMonths).toFixed(1);
+    let chartData;
+    let totalCount;
+    let avgCount;
     let peakCount = 0;
-    let peakMonthName = "-";
-    monthData.forEach((d) => {
-      if (d.count > peakCount) {
-        peakCount = d.count;
-        peakMonthName = `${formatMonth(d.month)} (${d.count})`;
-      }
-    });
+    let peakName = "-";
+
+    if (is30Days) {
+      chartData = get30DayChartBuckets(events, now);
+      const counts = chartData.map((d) => d.count);
+      totalCount = counts.reduce((acc, c) => acc + c, 0);
+      avgCount = (totalCount / 30).toFixed(1);
+      chartData.forEach((d) => {
+        if (d.count > peakCount) {
+          peakCount = d.count;
+          peakName = `${d.label} (${d.count})`;
+        }
+      });
+    } else {
+      const numberOfMonths = Number(periodValue) || 6;
+      const months = Array.from({ length: numberOfMonths }, (_, i) =>
+        new Date(now.getFullYear(), now.getMonth() - numberOfMonths + i + 1, 1)
+      );
+
+      chartData = months.map((month) => {
+        const mEvents = events.filter((e) => {
+          const d = dateFromISO(e.date);
+          return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
+        });
+        return {
+          month,
+          label: formatMonth(month),
+          fullLabel: formatMonth(month, "long"),
+          count: mEvents.length,
+          good: mEvents.filter((e) => e.sentiment === "good").length,
+          normal: mEvents.filter((e) => e.sentiment === "normal").length,
+          bad: mEvents.filter((e) => e.sentiment === "bad").length
+        };
+      });
+
+      const counts = chartData.map((d) => d.count);
+      totalCount = counts.reduce((acc, c) => acc + c, 0);
+      avgCount = (totalCount / numberOfMonths).toFixed(1);
+      chartData.forEach((d) => {
+        if (d.count > peakCount) {
+          peakCount = d.count;
+          peakName = `${d.label} (${d.count})`;
+        }
+      });
+    }
 
     const totalEl = $("#chart-stat-total");
     const avgEl = $("#chart-stat-avg");
     const peakEl = $("#chart-stat-peak");
     if (totalEl) totalEl.textContent = totalCount;
     if (avgEl) avgEl.textContent = avgCount;
-    if (peakEl) peakEl.textContent = peakCount > 0 ? peakMonthName : "-";
+    if (peakEl) peakEl.textContent = peakCount > 0 ? peakName : "-";
 
+    const counts = chartData.map((d) => d.count);
+    const numberOfPoints = chartData.length;
     const width = 680, height = 195, left = 38, right = 16, top = 20, bottom = 32;
     const maxCount = Math.max(4, Math.ceil(Math.max(...counts, 0) / 4) * 4);
     const chartHeight = height - top - bottom, chartWidth = width - left - right;
     const baseline = height - bottom;
 
-    const x = (i) => left + (numberOfMonths === 1 ? chartWidth / 2 : (i * chartWidth) / (numberOfMonths - 1));
+    const x = (i) => left + (numberOfPoints === 1 ? chartWidth / 2 : (i * chartWidth) / (numberOfPoints - 1));
     const y = (val) => top + chartHeight - (val / maxCount) * chartHeight;
 
     const pts = counts.map((c, i) => ({ x: x(i), y: y(c) }));
@@ -858,9 +949,6 @@
     const curvedLine = getCurvedPath(pts);
     const curvedArea = `${curvedLine} L ${pts[pts.length - 1].x.toFixed(1)} ${baseline.toFixed(1)} L ${pts[0].x.toFixed(1)} ${baseline.toFixed(1)} Z`;
 
-    const labelStep = numberOfMonths === 6 ? 1 : 2;
-    const currentMonthIdx = numberOfMonths - 1;
-
     const grid = Array.from({ length: 5 }, (_, i) => {
       const val = maxCount - (i * maxCount) / 4;
       const yPos = y(val);
@@ -869,19 +957,26 @@
         <text class="chart-y-label" x="${left - 10}" y="${(yPos + 3).toFixed(1)}" text-anchor="end">${Math.round(val)}</text>`;
     }).join("");
 
-    const labels = months.map((m, i) => {
-      if (i % labelStep !== 0 && i !== currentMonthIdx) return "";
-      const isCur = i === currentMonthIdx;
-      return `<text class="chart-label ${isCur ? "current-month" : ""}" x="${x(i).toFixed(1)}" y="${height - 8}" text-anchor="middle">${escapeHtml(formatMonth(m))}</text>`;
+    const labels = chartData.map((d, i) => {
+      let showLabel = false;
+      if (is30Days) {
+        showLabel = i % 6 === 0 || i === numberOfPoints - 1;
+      } else {
+        const labelStep = numberOfPoints === 6 ? 1 : 2;
+        showLabel = i % labelStep === 0 || i === numberOfPoints - 1;
+      }
+      if (!showLabel) return "";
+      const isCur = i === numberOfPoints - 1;
+      return `<text class="chart-label ${isCur ? "current-month" : ""}" x="${x(i).toFixed(1)}" y="${height - 8}" text-anchor="middle">${escapeHtml(d.label)}</text>`;
     }).join("");
 
     const crosshair = `<line class="chart-crosshair-line" id="chart-crosshair" x1="${left}" y1="${top}" x2="${left}" y2="${baseline}"></line>`;
 
-    const marks = monthData.map((d, i) => `
-      <g class="chart-point-group" data-month-idx="${i}">
-        <circle class="chart-point-hit" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="18" data-month-idx="${i}"></circle>
-        <circle class="chart-point" data-month-idx="${i}" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="4.5">
-          <title>${escapeHtml(formatMonth(d.month, "long"))}: ${d.count} moments</title>
+    const marks = chartData.map((d, i) => `
+      <g class="chart-point-group" data-point-idx="${i}">
+        <circle class="chart-point-hit" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="18" data-point-idx="${i}"></circle>
+        <circle class="chart-point" data-point-idx="${i}" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="${is30Days ? 3.5 : 4.5}">
+          <title>${escapeHtml(d.fullLabel || d.label)}: ${d.count} moments</title>
         </circle>
       </g>`).join("");
 
@@ -905,16 +1000,16 @@
     els.chartEmpty.hidden = events.length > 0;
     els.chart.hidden = events.length === 0;
 
-    attachChartInteractions(monthData, x, y);
+    attachChartInteractions(chartData, x, y);
   }
 
-  function attachChartInteractions(monthData, xFn, yFn) {
+  function attachChartInteractions(chartData, xFn, yFn) {
     const groups = els.chart.querySelectorAll(".chart-point-group");
     const crosshair = els.chart.querySelector("#chart-crosshair");
 
     groups.forEach((group) => {
-      const idx = Number(group.dataset.monthIdx);
-      const data = monthData[idx];
+      const idx = Number(group.dataset.pointIdx);
+      const data = chartData[idx];
       const pointCircle = group.querySelector(".chart-point");
       if (!data) return;
 
@@ -940,7 +1035,7 @@
         els.chartTooltip.style.top = `${pointY * scaleY}px`;
         els.chartTooltip.innerHTML = `
           <div class="chart-tooltip-header">
-            <span>${escapeHtml(formatMonth(data.month, "long"))}</span>
+            <span>${escapeHtml(data.fullLabel || data.label)}</span>
             <span class="chart-tooltip-count">${data.count} ${data.count === 1 ? "moment" : "moments"}</span>
           </div>
           <div class="chart-tooltip-pills">
@@ -1627,6 +1722,9 @@
       IMPACTS,
       renderImpactBadge,
       calculateStreak,
+      calculateStreaks,
+      calculateAverageImpact,
+      get30DayChartBuckets,
       getTimelineGroup,
       mergeEvents,
       reassignCategoryEvents,
