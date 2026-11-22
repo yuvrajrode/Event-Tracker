@@ -56,17 +56,6 @@ Open `index.html` (or your GitHub Pages link) on your phone and tap **"Add to Ho
 
 ---
 
-## 🔄 Updating Code Without Re-Downloading
-
-Gather includes a built-in update detector:
-1. Make your code changes in `index.html`, `styles.css`, or `app.js`.
-2. Update the version number in `version.json` (e.g. `"version": "1.0.1"`).
-3. Commit and push to GitHub (`git push`).
-4. In your Gather application, click **"Check for updates"** in the sidebar.
-5. An **"Update available!"** button will appear. Click **Update** to refresh and load the latest code in under 1 second without touching `Gather.exe` or losing your logged data!
-
----
-
 ## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |

@@ -1771,65 +1771,6 @@
     }
   });
 
-  async function checkForUpdates(manual = false) {
-    const versionBadge = $("#app-version-badge");
-    const updateWrap = $("#update-notification");
-    const updateText = $("#update-text");
-
-    if (versionBadge) {
-      versionBadge.textContent = `v${APP_VERSION}`;
-    }
-
-    try {
-      // 1. Check Service Worker registration for waiting updates
-      if ("serviceWorker" in navigator) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) {
-          reg.update().catch(() => {});
-          if (reg.waiting) {
-            if (updateWrap) updateWrap.hidden = false;
-            if (updateText) updateText.textContent = "New update ready!";
-            return;
-          }
-        }
-      }
-
-      // 2. Check version.json for version increment
-      const res = await fetch(`./version.json?_t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.version && data.version !== APP_VERSION) {
-          if (updateWrap) updateWrap.hidden = false;
-          if (updateText) updateText.textContent = `Update v${data.version} ready!`;
-          return;
-        }
-      }
-
-      if (manual) {
-        showToast(`You're on the latest version (v${APP_VERSION})! ✳`);
-      }
-    } catch (_) {
-      if (manual) {
-        showToast("Already up to date! ✳");
-      }
-    }
-  }
-
-  $("#check-update-button")?.addEventListener("click", () => checkForUpdates(true));
-  $("#apply-update-btn")?.addEventListener("click", async () => {
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg?.waiting) {
-        reg.waiting.postMessage("SKIP_WAITING");
-      }
-    }
-    if ("caches" in window) {
-      const names = await caches.keys();
-      await Promise.all(names.map((n) => caches.delete(n)));
-    }
-    window.location.reload(true);
-  });
-
     // Initialize
     initCustomSelect($("#chart-period"), false);
     initCustomSelect(els.quickCategorySelect, true);
@@ -1840,7 +1781,6 @@
 
     applyTheme(storage.getItem(THEME_KEY) || "light");
     checkFirstTimeUser();
-    checkForUpdates(false);
     const initialTab = window.location.hash === "#events" ? "events" : "overview";
     switchTab(initialTab);
     render();

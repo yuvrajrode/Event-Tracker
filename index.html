@@ -42,19 +42,7 @@
             <div class="avatar" id="user-avatar">Y</div>
             <div class="profile-copy">
               <strong id="user-space-name">Your space</strong>
-              <span id="user-space-sub">Personal tracker · Edit</span>
-            </div>
-          </div>
-
-          <div class="sidebar-version-wrap">
-            <div class="version-badge-row">
-              <span class="version-pill" id="app-version-badge">v1.0.0</span>
-              <button type="button" class="check-update-btn" id="check-update-button" title="Check for updates without downloading">Check for updates</button>
-            </div>
-            <div class="update-notification" id="update-notification" hidden>
-              <span class="update-pulse" aria-hidden="true"></span>
-              <span class="update-text" id="update-text">Update available!</span>
-              <button type="button" class="update-apply-btn" id="apply-update-btn">Update</button>
+              <span id="user-space-sub">Personal tracker · v1.0.0</span>
             </div>
           </div>
         </div>
@@ -444,9 +432,15 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
     <script>
-      if ("serviceWorker" in navigator && (window.location.protocol === "http:" || window.location.protocol === "https:")) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker.register("./sw.js").catch(() => {});
+      // Clear any legacy service workers/caches to ensure real-time local updates
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) reg.unregister();
+        });
+      }
+      if ("caches" in window) {
+        caches.keys().then((keys) => {
+          for (const k of keys) caches.delete(k);
         });
       }
     </script>
