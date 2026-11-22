@@ -13,7 +13,7 @@
   const CATEGORIES_KEY = "gather.categories.v1";
   const THEME_KEY = "gather.theme.v1";
   const USERNAME_KEY = "gather.username.v1";
-  const APP_VERSION = "1.0.0";
+  const APP_VERSION = "2.1.0";
 
   const SENTIMENTS = {
     good: { label: "Good", icon: "☀", className: "good" },
@@ -232,12 +232,12 @@
     sentimentPicker: $("#sentiment-picker"),
     impactPicker: $("#impact-picker"),
     modalImpactDesc: $("#modal-impact-desc"),
-    chart: $("#activity-chart"),
-    chartEmpty: $("#chart-empty"),
     chartTooltip: $("#chart-tooltip"),
     toast: $("#toast"),
     quickForm: $("#quick-add-form"),
-    quickTitle: $("#quick-title")
+    quickTitle: $("#quick-title"),
+    checkUpdatesBtn: $("#check-updates-btn"),
+    updateAvailableBadge: $("#update-available-badge")
   };
 
   function saveData() {
@@ -285,14 +285,16 @@
       title: "Name your space",
       message: "Personalize your workspace name:",
       inputLabel: "Space name",
+      inputValue: username && username !== "Your space" ? username : "",
       inputPlaceholder: "e.g. Rodey's space, Alex",
       confirmLabel: "Save name"
-    }).then((newName) => {
-      if (newName && typeof newName === "string" && newName.trim()) {
-        username = newName.trim();
+    }).then((res) => {
+      const name = typeof res === "string" ? res : (res && res.value ? res.value : "");
+      if (name && name.trim()) {
+        username = name.trim();
         storage.setItem(USERNAME_KEY, username);
         updateUsernameUI(username);
-        showToast("Space name updated.");
+        showToast("Space name updated! ✳");
       }
     });
   }
@@ -484,6 +486,141 @@
     return null;
   }
 
+  let latestReleaseUrl = "https://github.com/yuvrajrode/Event-Tracker/releases/latest";
+  let hasPendingUpdate = false;
+
+  function parseSemVer(v) {
+    if (!v) return [0, 0, 0];
+    const str = String(v).replace(/^v/i, "").split("-")[0].trim();
+    const parts = str.split(".").map((p) => {
+      const num = parseInt(p, 10);
+      return isNaN(num) ? 0 : num;
+    });
+    while (parts.length < 3) parts.push(0);
+    return parts;
+  }
+
+  function compareSemVer(a, b) {
+    const pA = parseSemVer(a);
+    const pB = parseSemVer(b);
+    const len = Math.max(pA.length, pB.length);
+    for (let i = 0; i < len; i++) {
+      const numA = pA[i] || 0;
+      const numB = pB[i] || 0;
+      if (numA > numB) return 1;
+      if (numA < numB) return -1;
+    }
+    return 0;
+  }
+
+  function isNewerVersion(latest, current) {
+    return compareSemVer(latest, current) > 0;
+  }
+
+  async function checkForUpdates(options = {}) {
+    const isManual = !options.silent;
+    const btn = els.checkUpdatesBtn;
+    const textEl = btn?.querySelector(".update-btn-text") || btn;
+
+    if (hasPendingUpdate && isManual) {
+      if (typeof showCustomDialog === "function") {
+        showCustomDialog({
+          title: "Update available",
+          message: "A new version of Gather is available on GitHub. Would you like to open the releases page to download it?",
+          confirmLabel: "Open release ↗",
+          secondaryLabel: "Later"
+        }).then((confirmed) => {
+          if (confirmed && typeof window !== "undefined") {
+            window.open(latestReleaseUrl, "_blank", "noopener,noreferrer");
+          }
+        });
+      } else if (typeof window !== "undefined") {
+        window.open(latestReleaseUrl, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
+    if (isManual && btn) {
+      btn.classList.add("is-checking");
+      if (textEl) textEl.textContent = "Checking...";
+      btn.disabled = true;
+    }
+
+    try {
+      const res = await fetch("https://api.github.com/repos/yuvrajrode/Event-Tracker/releases/latest", {
+        headers: { Accept: "application/vnd.github.v3+json" }
+      });
+      if (!res.ok) throw new Error("Status " + res.status);
+      const data = await res.json();
+      const latestTag = (data.tag_name || "").trim();
+      if (data.html_url) {
+        latestReleaseUrl = data.html_url;
+      }
+
+      if (isNewerVersion(latestTag, APP_VERSION)) {
+        hasPendingUpdate = true;
+        const cleanTag = latestTag.replace(/^v/i, "");
+        if (btn) {
+          btn.classList.remove("is-checking");
+          btn.classList.add("has-update");
+          btn.title = `Update v${cleanTag} available on GitHub · Click to download`;
+          if (textEl) textEl.textContent = `Update v${cleanTag} ↗`;
+        }
+        if (isManual) {
+          if (typeof showCustomDialog === "function") {
+            showCustomDialog({
+              title: `Update to v${cleanTag}`,
+              message: `Gather ${latestTag} is now available on GitHub with the latest features.\n\nWould you like to open the download page?`,
+              confirmLabel: `Download ${latestTag} ↗`,
+              secondaryLabel: "Not now"
+            }).then((confirmed) => {
+              if (confirmed && typeof window !== "undefined") {
+                window.open(latestReleaseUrl, "_blank", "noopener,noreferrer");
+              }
+            });
+          } else {
+            showToast(`Update available: ${latestTag}! Click to view release.`);
+          }
+        }
+      } else {
+        hasPendingUpdate = false;
+        if (btn) {
+          btn.classList.remove("is-checking", "has-update");
+          btn.title = `Gather v${APP_VERSION} · Up to date (click to check)`;
+          if (textEl) textEl.textContent = `v${APP_VERSION}`;
+        }
+        if (isManual) {
+          showToast(`Gather is up to date (v${APP_VERSION}) ✦`);
+        }
+      }
+    } catch (err) {
+      if (btn) {
+        btn.classList.remove("is-checking");
+        if (textEl) textEl.textContent = `v${APP_VERSION}`;
+      }
+      if (isManual) {
+        showToast("Could not check for updates. Check internet connection.");
+      }
+    } finally {
+      if (isManual && btn) {
+        btn.disabled = false;
+        if (!hasPendingUpdate && textEl) {
+          textEl.textContent = `v${APP_VERSION}`;
+        }
+      }
+    }
+  }
+
+  function formatHeatmapTooltipText(count, dateStr) {
+    let dateFormatted = "";
+    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      dateFormatted = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(y, m - 1, d));
+    }
+    const countWord = count === 1 ? "moment" : "moments";
+    return dateFormatted ? `${count} ${countWord} ${dateFormatted}` : `${count} ${countWord}`;
+  }
+
   function getHeatmapIntensity(dayEvents) {
     if (!dayEvents || !dayEvents.length) return 0;
     const count = dayEvents.length;
@@ -495,12 +632,55 @@
     return 1;
   }
 
-  function getYearlyHeatmapData(eventsList = events, referenceDate = new Date()) {
-    const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
-    const refDateStr = localDateString(ref);
+  const INSTALL_YEAR_KEY = "gather.install_year.v1";
 
-    const currentWeekSunday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - ref.getDay());
-    const startSunday = new Date(currentWeekSunday.getFullYear(), currentWeekSunday.getMonth(), currentWeekSunday.getDate() - (52 * 7));
+  function getAppInstallYear() {
+    let stored = storage.getItem(INSTALL_YEAR_KEY);
+    const curYear = new Date().getFullYear();
+
+    // Check actual earliest event date in events
+    let earliestEventYear = curYear;
+    (events || []).forEach((e) => {
+      const y = parseInt((e.date || "").slice(0, 4), 10);
+      if (y && y >= 1990 && y < earliestEventYear) earliestEventYear = y;
+    });
+
+    // If no storage exists or if storage was set to a synthetic older year without any actual events, use true year
+    if (!stored || (stored !== String(curYear) && earliestEventYear === curYear)) {
+      stored = String(earliestEventYear);
+      storage.setItem(INSTALL_YEAR_KEY, stored);
+    }
+    const parsed = parseInt(stored, 10);
+    return isNaN(parsed) ? curYear : Math.min(parsed, earliestEventYear);
+  }
+
+  function getAvailableHeatmapYears() {
+    const curYear = new Date().getFullYear();
+    let minYear = getAppInstallYear();
+    (events || []).forEach((e) => {
+      const y = parseInt((e.date || "").slice(0, 4), 10);
+      if (y && y >= 1990 && y < minYear) minYear = y;
+    });
+    const years = [];
+    for (let yr = curYear; yr >= minYear; yr--) {
+      years.push(yr);
+    }
+    return years;
+  }
+
+  let selectedHeatmapYear = new Date().getFullYear();
+
+  function getYearlyHeatmapData(eventsList = events, referenceDateOrYear = new Date()) {
+    const targetYear = typeof referenceDateOrYear === "number"
+      ? referenceDateOrYear
+      : (referenceDateOrYear ? referenceDateOrYear.getFullYear() : new Date().getFullYear());
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const todayStr = localDateString(now);
+
+    const jan1 = new Date(targetYear, 0, 1);
+    const startSunday = new Date(targetYear, 0, 1 - jan1.getDay());
 
     const eventsByDate = new Map();
     (eventsList || []).forEach((ev) => {
@@ -524,14 +704,15 @@
         const offsetDays = (w * 7) + d;
         const cellDate = new Date(startSunday.getFullYear(), startSunday.getMonth(), startSunday.getDate() + offsetDays);
         const cellDateStr = localDateString(cellDate);
-        const isFuture = cellDateStr > refDateStr;
-        const dayEvents = isFuture ? [] : (eventsByDate.get(cellDateStr) || []);
+        const isOutsideYear = cellDate.getFullYear() !== targetYear;
+        const isFuture = !isOutsideYear && (targetYear === curYear && cellDateStr > todayStr);
+        const dayEvents = (isOutsideYear || isFuture) ? [] : (eventsByDate.get(cellDateStr) || []);
 
         const count = dayEvents.length;
         const maxImpact = count > 0 ? Math.max(...dayEvents.map((e) => Number(e.impact) || 3)) : 0;
-        const intensity = isFuture ? 0 : getHeatmapIntensity(dayEvents);
+        const intensity = isFuture || isOutsideYear ? 0 : getHeatmapIntensity(dayEvents);
 
-        if (!isFuture) {
+        if (!isOutsideYear && !isFuture) {
           totalMoments += count;
           if (count > 0) {
             activeDays++;
@@ -539,7 +720,7 @@
           }
         }
 
-        if (d === 0 && cellDate.getMonth() !== lastMonth && !isFuture) {
+        if (!isOutsideYear && cellDate.getMonth() !== lastMonth) {
           lastMonth = cellDate.getMonth();
           monthLabels.push({
             colIndex: w,
@@ -552,6 +733,7 @@
           dateStr: cellDateStr,
           dayOfWeek: d,
           weekIndex: w,
+          isOutsideYear,
           isFuture,
           count,
           maxImpact,
@@ -569,6 +751,7 @@
     }
 
     return {
+      year: targetYear,
       weeks,
       monthLabels,
       totalMoments,
@@ -1099,226 +1282,30 @@
     banner.hidden = false;
   }
 
-  function renderChart() {
-    const periodValue = $("#chart-period") ? $("#chart-period").value : "6";
-    const is30Days = periodValue === "30";
-    const now = new Date();
-
-    let chartData;
-    let totalCount;
-    let avgCount;
-    let peakCount = 0;
-    let peakName = "-";
-
-    if (is30Days) {
-      chartData = get30DayChartBuckets(events, now);
-      const counts = chartData.map((d) => d.count);
-      totalCount = counts.reduce((acc, c) => acc + c, 0);
-      avgCount = (totalCount / 30).toFixed(1);
-      chartData.forEach((d) => {
-        if (d.count > peakCount) {
-          peakCount = d.count;
-          peakName = `${d.label} (${d.count})`;
-        }
-      });
-    } else {
-      const numberOfMonths = Number(periodValue) || 6;
-      const months = Array.from({ length: numberOfMonths }, (_, i) =>
-        new Date(now.getFullYear(), now.getMonth() - numberOfMonths + i + 1, 1)
-      );
-
-      chartData = months.map((month) => {
-        const mEvents = events.filter((e) => {
-          const d = dateFromISO(e.date);
-          return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
-        });
-        return {
-          month,
-          label: formatMonth(month),
-          fullLabel: formatMonth(month, "long"),
-          count: mEvents.length,
-          good: mEvents.filter((e) => e.sentiment === "good").length,
-          normal: mEvents.filter((e) => e.sentiment === "normal").length,
-          bad: mEvents.filter((e) => e.sentiment === "bad").length
-        };
-      });
-
-      const counts = chartData.map((d) => d.count);
-      totalCount = counts.reduce((acc, c) => acc + c, 0);
-      avgCount = (totalCount / numberOfMonths).toFixed(1);
-      chartData.forEach((d) => {
-        if (d.count > peakCount) {
-          peakCount = d.count;
-          peakName = `${d.label} (${d.count})`;
-        }
-      });
-    }
-
-    const totalEl = $("#chart-stat-total");
-    const avgEl = $("#chart-stat-avg");
-    const peakEl = $("#chart-stat-peak");
-    if (totalEl) totalEl.textContent = totalCount;
-    if (avgEl) avgEl.textContent = avgCount;
-    if (peakEl) peakEl.textContent = peakCount > 0 ? peakName : "-";
-
-    const counts = chartData.map((d) => d.count);
-    const numberOfPoints = chartData.length;
-    const width = 680, height = 195, left = 38, right = 16, top = 20, bottom = 32;
-    const maxCount = Math.max(4, Math.ceil(Math.max(...counts, 0) / 4) * 4);
-    const chartHeight = height - top - bottom, chartWidth = width - left - right;
-    const baseline = height - bottom;
-
-    const x = (i) => left + (numberOfPoints === 1 ? chartWidth / 2 : (i * chartWidth) / (numberOfPoints - 1));
-    const y = (val) => top + chartHeight - (val / maxCount) * chartHeight;
-
-    const pts = counts.map((c, i) => ({ x: x(i), y: y(c) }));
-
-    function getCurvedPath(points) {
-      if (!points.length) return "";
-      if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-      let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[Math.max(0, i - 1)];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = points[Math.min(points.length - 1, i + 2)];
-        let cp1x = p1.x + (p2.x - p0.x) / 6;
-        let cp1y = p1.y + (p2.y - p0.y) / 6;
-        let cp2x = p2.x - (p3.x - p1.x) / 6;
-        let cp2y = p2.y - (p3.y - p1.y) / 6;
-        if (p1.y === baseline && p2.y === baseline) {
-          cp1y = baseline;
-          cp2y = baseline;
-        } else {
-          cp1y = Math.min(baseline, Math.max(top, cp1y));
-          cp2y = Math.min(baseline, Math.max(top, cp2y));
-        }
-        d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-      }
-      return d;
-    }
-
-    const curvedLine = getCurvedPath(pts);
-    const curvedArea = `${curvedLine} L ${pts[pts.length - 1].x.toFixed(1)} ${baseline.toFixed(1)} L ${pts[0].x.toFixed(1)} ${baseline.toFixed(1)} Z`;
-
-    const grid = Array.from({ length: 5 }, (_, i) => {
-      const val = maxCount - (i * maxCount) / 4;
-      const yPos = y(val);
-      return `
-        <line class="chart-gridline" x1="${left}" y1="${yPos.toFixed(1)}" x2="${(width - right).toFixed(1)}" y2="${yPos.toFixed(1)}"></line>
-        <text class="chart-y-label" x="${left - 10}" y="${(yPos + 3).toFixed(1)}" text-anchor="end">${Math.round(val)}</text>`;
-    }).join("");
-
-    const labels = chartData.map((d, i) => {
-      let showLabel = false;
-      if (is30Days) {
-        showLabel = i % 6 === 0 || i === numberOfPoints - 1;
-      } else {
-        const labelStep = numberOfPoints === 6 ? 1 : 2;
-        showLabel = i % labelStep === 0 || i === numberOfPoints - 1;
-      }
-      if (!showLabel) return "";
-      const isCur = i === numberOfPoints - 1;
-      return `<text class="chart-label ${isCur ? "current-month" : ""}" x="${x(i).toFixed(1)}" y="${height - 8}" text-anchor="middle">${escapeHtml(d.label)}</text>`;
-    }).join("");
-
-    const crosshair = `<line class="chart-crosshair-line" id="chart-crosshair" x1="${left}" y1="${top}" x2="${left}" y2="${baseline}"></line>`;
-
-    const marks = chartData.map((d, i) => `
-      <g class="chart-point-group" data-point-idx="${i}">
-        <circle class="chart-point-hit" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="18" data-point-idx="${i}"></circle>
-        <circle class="chart-point" data-point-idx="${i}" cx="${x(i).toFixed(1)}" cy="${y(d.count).toFixed(1)}" r="${is30Days ? 3.5 : 4.5}">
-          <title>${escapeHtml(d.fullLabel || d.label)}: ${d.count} moments</title>
-        </circle>
-      </g>`).join("");
-
-    els.chart.innerHTML = `
-      <defs>
-        <linearGradient id="chartCurvedFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="var(--brand)" stop-opacity="0.32"></stop>
-          <stop offset="65%" stop-color="var(--brand)" stop-opacity="0.06"></stop>
-          <stop offset="100%" stop-color="var(--brand)" stop-opacity="0.00"></stop>
-        </linearGradient>
-      </defs>
-      ${grid}
-      ${crosshair}
-      <path class="chart-area" d="${curvedArea}"></path>
-      <path class="chart-line-glow" d="${curvedLine}"></path>
-      <path class="chart-line" d="${curvedLine}"></path>
-      ${marks}
-      ${labels}`;
-
-    els.chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    els.chartEmpty.hidden = events.length > 0;
-    els.chart.hidden = events.length === 0;
-
-    attachChartInteractions(chartData, x, y);
-  }
-
-  function attachChartInteractions(chartData, xFn, yFn) {
-    const groups = els.chart.querySelectorAll(".chart-point-group");
-    const crosshair = els.chart.querySelector("#chart-crosshair");
-
-    groups.forEach((group) => {
-      const idx = Number(group.dataset.pointIdx);
-      const data = chartData[idx];
-      const pointCircle = group.querySelector(".chart-point");
-      if (!data) return;
-
-      const onEnter = () => {
-        if (!els.chartTooltip) return;
-        const rect = els.chart.getBoundingClientRect();
-        const svgBox = els.chart.viewBox.baseVal;
-        const scaleX = rect.width / (svgBox.width || 680);
-        const scaleY = rect.height / (svgBox.height || 195);
-
-        const pointX = xFn(idx);
-        const pointY = yFn(data.count);
-
-        if (crosshair) {
-          crosshair.setAttribute("x1", pointX.toFixed(1));
-          crosshair.setAttribute("x2", pointX.toFixed(1));
-          crosshair.style.opacity = "0.75";
-        }
-        if (pointCircle) pointCircle.classList.add("active");
-
-        els.chartTooltip.hidden = false;
-        els.chartTooltip.style.left = `${pointX * scaleX}px`;
-        els.chartTooltip.style.top = `${pointY * scaleY}px`;
-        els.chartTooltip.innerHTML = `
-          <div class="chart-tooltip-header">
-            <span>${escapeHtml(data.fullLabel || data.label)}</span>
-            <span class="chart-tooltip-count">${data.count} ${data.count === 1 ? "moment" : "moments"}</span>
-          </div>
-          <div class="chart-tooltip-pills">
-            <span class="chart-tooltip-pill good">☀ ${data.good} Good</span>
-            <span class="chart-tooltip-pill normal">◒ ${data.normal} Normal</span>
-            <span class="chart-tooltip-pill bad">☁ ${data.bad} Tough</span>
-          </div>`;
-      };
-
-      const onLeave = () => {
-        if (crosshair) crosshair.style.opacity = "0";
-        if (pointCircle) pointCircle.classList.remove("active");
-        if (els.chartTooltip) els.chartTooltip.hidden = true;
-      };
-
-      group.addEventListener("mouseenter", onEnter);
-      group.addEventListener("mouseleave", onLeave);
-    });
-  }
-
-  let activeActivityView = "chart";
 
   function renderYearlyHeatmap() {
     const matrixWrap = $("#heatmap-matrix-wrap");
     if (!matrixWrap) return;
 
-    const data = getYearlyHeatmapData(events);
+    const curYear = new Date().getFullYear();
+    const isCurYear = selectedHeatmapYear === curYear;
+
+    const data = getYearlyHeatmapData(events, selectedHeatmapYear);
     const totalEl = $("#heatmap-total-moments");
     const activeDaysEl = $("#heatmap-active-days");
+    const momentsLabel = $("#heatmap-moments-label");
+    const daysLabel = $("#heatmap-days-label");
+
     if (totalEl) totalEl.textContent = data.totalMoments;
     if (activeDaysEl) activeDaysEl.textContent = data.activeDays;
+    if (momentsLabel) {
+      const momentWord = data.totalMoments === 1 ? "moment" : "moments";
+      momentsLabel.textContent = isCurYear ? `${momentWord} this year` : `${momentWord} in ${selectedHeatmapYear}`;
+    }
+    if (daysLabel) {
+      const dayWord = data.activeDays === 1 ? "active day" : "active days";
+      daysLabel.textContent = isCurYear ? dayWord : `${dayWord} in ${selectedHeatmapYear}`;
+    }
 
     const dayLabels = ["", "M", "", "W", "", "F", ""];
     let html = `<div class="heatmap-grid">`;
@@ -1336,6 +1323,10 @@
       const col = wIdx + 2;
       week.forEach((day, dIdx) => {
         const row = dIdx + 2;
+        if (day.isOutsideYear) {
+          html += `<span class="heatmap-cell is-outside-year" style="grid-column: ${col}; grid-row: ${row}"></span>`;
+          return;
+        }
         const futureClass = day.isFuture ? " is-future" : "";
         html += `<span class="heatmap-cell lvl-${day.intensity}${futureClass}"
           style="grid-column: ${col}; grid-row: ${row}"
@@ -1350,41 +1341,41 @@
     html += `</div>`;
     matrixWrap.innerHTML = html;
 
-    const cells = matrixWrap.querySelectorAll(".heatmap-cell:not(.is-future)");
+    // Render Years Navigation on the right (like GitHub)
+    const yearsNav = $("#heatmap-years-nav");
+    if (yearsNav) {
+      const years = getAvailableHeatmapYears();
+      yearsNav.innerHTML = years.map((yr) => `
+        <button type="button" class="heatmap-year-btn ${yr === selectedHeatmapYear ? "active" : ""}" data-year="${yr}" aria-pressed="${yr === selectedHeatmapYear ? "true" : "false"}">
+          ${yr}
+        </button>
+      `).join("");
+
+      yearsNav.querySelectorAll(".heatmap-year-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selectedHeatmapYear = Number(btn.dataset.year);
+          renderYearlyHeatmap();
+        });
+      });
+    }
+
+    const cells = matrixWrap.querySelectorAll(".heatmap-cell:not(.is-future):not(.is-outside-year)");
     cells.forEach((cell) => {
       cell.addEventListener("mouseenter", () => {
         const dateStr = cell.dataset.date;
         const count = Number(cell.dataset.count) || 0;
-        const maxImpact = Number(cell.dataset.maxImpact) || 0;
         const tooltip = els.chartTooltip;
         if (!tooltip) return;
 
-        const dayEvents = events.filter((ev) => ev.date === dateStr);
-        let previewHtml = "";
-        if (dayEvents.length > 0) {
-          previewHtml = `<div class="tooltip-moments-preview">${dayEvents.slice(0, 3).map((ev) => `
-            <div class="tooltip-moment-row">
-              <span>${SENTIMENTS[ev.sentiment]?.icon || '•'}</span>
-              <span class="tooltip-moment-title">${escapeHtml(ev.title)}</span>
-              ${ev.impact ? `<span class="tooltip-moment-star">★${ev.impact}</span>` : ''}
-            </div>
-          `).join("")}${dayEvents.length > 3 ? `<div class="tooltip-moment-more">+${dayEvents.length - 3} more</div>` : ''}</div>`;
-        }
-
-        tooltip.innerHTML = `
-          <div class="chart-tooltip-header">
-            <span>${formatDate(dateStr)}</span>
-            <span class="chart-tooltip-count">${count} ${count === 1 ? "moment" : "moments"}</span>
-          </div>
-          ${maxImpact ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">Peak impact: Level ${maxImpact}</div>` : ""}
-          ${previewHtml}
-        `;
+        const text = formatHeatmapTooltipText(count, dateStr);
+        tooltip.innerHTML = `<span class="heatmap-simple-tooltip">${escapeHtml(text)}</span>`;
         tooltip.hidden = false;
 
         const rect = cell.getBoundingClientRect();
-        const containerRect = matrixWrap.getBoundingClientRect();
-        const left = rect.left - containerRect.left + (rect.width / 2);
-        const top = rect.top - containerRect.top - 8;
+        const offsetParent = tooltip.offsetParent || matrixWrap;
+        const parentRect = offsetParent.getBoundingClientRect();
+        const left = rect.left - parentRect.left + (rect.width / 2);
+        const top = rect.top - parentRect.top - 8;
         tooltip.style.left = `${left}px`;
         tooltip.style.top = `${top}px`;
       });
@@ -1413,11 +1404,7 @@
     renderStats();
     renderFlashbackBanner();
     renderBreakdown();
-    if (activeActivityView === "heatmap") {
-      renderYearlyHeatmap();
-    } else {
-      renderChart();
-    }
+    renderYearlyHeatmap();
     if (activeTab === "events") {
       renderEvents();
     } else {
@@ -1770,6 +1757,8 @@
 
   $("#export-button")?.addEventListener("click", () => exportData(false));
 
+  $("#check-updates-btn")?.addEventListener("click", () => checkForUpdates({ silent: false }));
+
   $("#import-button")?.addEventListener("click", () => $("#import-file")?.click());
   $("#import-file")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
@@ -1980,42 +1969,6 @@
 
   const debouncedRenderEvents = debounce(renderEvents, 150);
   $("#event-search")?.addEventListener("input", debouncedRenderEvents);
-  $("#chart-period")?.addEventListener("change", renderChart);
-
-  $("#btn-view-chart")?.addEventListener("click", () => {
-    activeActivityView = "chart";
-    $("#btn-view-chart")?.classList.add("active");
-    $("#btn-view-heatmap")?.classList.remove("active");
-    $("#btn-view-chart")?.setAttribute("aria-selected", "true");
-    $("#btn-view-heatmap")?.setAttribute("aria-selected", "false");
-    const legendRow = $("#chart-legend-row");
-    const chartContainer = $("#chart-container");
-    const periodWrap = $("#chart-period-wrap");
-    const heatmapContainer = $("#heatmap-container");
-    if (legendRow) legendRow.hidden = false;
-    if (chartContainer) chartContainer.hidden = false;
-    if (periodWrap) periodWrap.hidden = false;
-    if (heatmapContainer) heatmapContainer.hidden = true;
-    renderChart();
-  });
-
-  $("#btn-view-heatmap")?.addEventListener("click", () => {
-    activeActivityView = "heatmap";
-    $("#btn-view-heatmap")?.classList.add("active");
-    $("#btn-view-chart")?.classList.remove("active");
-    $("#btn-view-heatmap")?.setAttribute("aria-selected", "true");
-    $("#btn-view-chart")?.setAttribute("aria-selected", "false");
-    const legendRow = $("#chart-legend-row");
-    const chartContainer = $("#chart-container");
-    const periodWrap = $("#chart-period-wrap");
-    const heatmapContainer = $("#heatmap-container");
-    if (legendRow) legendRow.hidden = true;
-    if (chartContainer) chartContainer.hidden = true;
-    if (periodWrap) periodWrap.hidden = true;
-    if (heatmapContainer) heatmapContainer.hidden = false;
-    renderYearlyHeatmap();
-  });
-
   els.eventList.addEventListener("click", async (e) => {
     if (e.target.closest("[data-empty-add]")) {
       openModal();
@@ -2255,7 +2208,6 @@
   });
 
     // Initialize
-    initCustomSelect($("#chart-period"), false);
     initCustomSelect(els.quickCategorySelect, true);
     initCustomSelect(els.categoryFilter, true);
     initCustomSelect(els.dateFilter, false);
@@ -2267,6 +2219,11 @@
     const initialTab = window.location.hash === "#events" ? "events" : "overview";
     switchTab(initialTab);
     render();
+
+    // Check for updates in background (non-blocking)
+    setTimeout(() => {
+      checkForUpdates({ silent: true });
+    }, 2000);
   }
 
   if (typeof module !== "undefined" && module.exports) {
@@ -2293,6 +2250,13 @@
       formatFlashbackTimeAgo,
       getHeatmapIntensity,
       getYearlyHeatmapData,
+      formatHeatmapTooltipText,
+      getAppInstallYear,
+      getAvailableHeatmapYears,
+      parseSemVer,
+      compareSemVer,
+      isNewerVersion,
+      checkForUpdates,
       isTypingTarget,
       matchKeyboardAction,
       focusQuickAdd,

@@ -42,7 +42,7 @@
             <div class="avatar" id="user-avatar">Y</div>
             <div class="profile-copy">
               <strong id="user-space-name">Your space</strong>
-              <span id="user-space-sub">Personal tracker · v1.0.0</span>
+              <span id="user-space-sub">Personal tracker · v2.1.0</span>
             </div>
           </div>
         </div>
@@ -57,6 +57,10 @@
           </div>
           <div class="topbar-actions">
             <span class="today-label" id="today-label"></span>
+            <button class="topbar-badge-btn" id="check-updates-btn" type="button" title="Gather v2.1.0 · Click to check for updates">
+              <span class="update-dot" aria-hidden="true"></span>
+              <span class="update-btn-text">v2.1.0</span>
+            </button>
             <button class="icon-button topbar-icon-btn" id="shortcuts-help-btn" type="button" title="Keyboard Shortcuts (Press ?)" aria-label="Keyboard Shortcuts">⌨</button>
             <button class="button button-quiet theme-toggle" id="theme-toggle" type="button" aria-pressed="false" title="Switch theme (Press D)">
               <span class="theme-toggle-icon" aria-hidden="true">☾</span>
@@ -208,58 +212,29 @@
               </form>
             </section>
 
-            <section class="content-grid">
+            <section class="activity-section">
               <article class="panel activity-panel">
                 <div class="panel-heading">
                   <div>
                     <h2>Your activity</h2>
                     <p>See how your moments add up over time.</p>
                   </div>
-                  <div class="activity-view-toggles">
-                    <div class="segmented-control" role="tablist" aria-label="Activity view mode">
-                      <button type="button" class="segmented-btn active" id="btn-view-chart" role="tab" aria-selected="true">Trend</button>
-                      <button type="button" class="segmented-btn" id="btn-view-heatmap" role="tab" aria-selected="false">365-Day Heatmap</button>
-                    </div>
-                    <div class="select-wrap" id="chart-period-wrap">
-                      <select id="chart-period" aria-label="Activity chart period">
-                        <option value="30">Last 30 days</option>
-                        <option value="6">Last 6 months</option>
-                        <option value="12">Last 12 months</option>
-                      </select>
-                      <span class="select-chevron" aria-hidden="true">
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      </span>
-                    </div>
+                  <div class="heatmap-stats">
+                    <span class="heatmap-stat-pill"><strong id="heatmap-total-moments">0</strong> <span id="heatmap-moments-label">moments this year</span></span>
+                    <span class="heatmap-stat-pill"><strong id="heatmap-active-days">0</strong> <span id="heatmap-days-label">active days</span></span>
                   </div>
-                </div>
-                <div class="chart-legend-row" id="chart-legend-row">
-                  <div class="chart-legend">
-                    <span class="legend-dot"></span>
-                    <span class="legend-text">Moments logged</span>
-                  </div>
-                  <div class="chart-summary-chips" id="chart-summary-chips">
-                    <span class="chart-stat-chip"><span id="chart-stat-total">0</span> in view</span>
-                    <span class="chart-stat-chip"><span id="chart-stat-avg">0.0</span>/mo avg</span>
-                    <span class="chart-stat-chip peak-chip">Peak: <span id="chart-stat-peak">-</span></span>
-                  </div>
-                </div>
-                <div class="chart-container" id="chart-container">
-                  <div class="chart-empty" id="chart-empty">
-                    <span class="empty-chart-icon">⌁</span>
-                    <strong>Your story starts here</strong>
-                    <span>Log an event to see your activity take shape.</span>
-                  </div>
-                  <div class="chart-tooltip" id="chart-tooltip" hidden></div>
-                  <svg id="activity-chart" role="img" aria-label="Events logged by month"></svg>
                 </div>
 
                 <!-- 365-Day Activity Heatmap -->
-                <div class="heatmap-container" id="heatmap-container" hidden>
-                  <div class="heatmap-header">
-                    <div class="heatmap-stats">
-                      <span class="heatmap-stat-pill"><strong id="heatmap-total-moments">0</strong> moments this year</span>
-                      <span class="heatmap-stat-pill"><strong id="heatmap-active-days">0</strong> active days</span>
+                <div class="heatmap-container" id="heatmap-container">
+                  <div class="heatmap-body-wrap">
+                    <div class="heatmap-scroll-wrap">
+                      <div class="heatmap-matrix-wrap" id="heatmap-matrix-wrap"></div>
                     </div>
+                    <aside class="heatmap-years-nav" id="heatmap-years-nav" aria-label="Contribution years"></aside>
+                  </div>
+                  <div class="heatmap-footer">
+                    <span class="heatmap-footer-note">Daily activity by calendar year</span>
                     <div class="heatmap-legend">
                       <span>Less</span>
                       <span class="heatmap-cell lvl-0" aria-label="0 events"></span>
@@ -270,12 +245,12 @@
                       <span>More</span>
                     </div>
                   </div>
-                  <div class="heatmap-scroll-wrap">
-                    <div class="heatmap-matrix-wrap" id="heatmap-matrix-wrap"></div>
-                  </div>
+                  <div class="chart-tooltip" id="chart-tooltip" hidden></div>
                 </div>
               </article>
+            </section>
 
+            <section class="overview-duo-grid">
               <article class="panel category-panel">
                 <div class="panel-heading">
                   <div>
@@ -286,18 +261,18 @@
                 </div>
                 <div class="category-breakdown" id="category-breakdown"></div>
               </article>
-            </section>
 
-            <!-- Overview Recent Highlights Banner -->
-            <section class="overview-recent-strip">
-              <div class="overview-recent-head">
-                <div>
-                  <h3>Latest Highlights</h3>
-                  <p>Recent moments logged in your workspace</p>
+              <!-- Overview Recent Highlights Banner -->
+              <article class="panel overview-recent-strip">
+                <div class="overview-recent-head">
+                  <div>
+                    <h2>Latest Highlights</h2>
+                    <p>Recent moments logged in your workspace</p>
+                  </div>
+                  <button type="button" class="button button-quiet" id="goto-events-btn">View all events →</button>
                 </div>
-                <button type="button" class="button button-quiet" id="goto-events-btn">View all events →</button>
-              </div>
-              <div class="overview-recent-list" id="overview-recent-list"></div>
+                <div class="overview-recent-list" id="overview-recent-list"></div>
+              </article>
             </section>
           </section>
 
