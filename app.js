@@ -635,8 +635,10 @@
       if (splitNormal) splitNormal.style.width = `${normalPct}%`;
       if (splitBad) splitBad.style.width = `${badPct}%`;
 
-      $("#average-rating").textContent = `${goodPct}% positive · ${avgImpact}★ impact`;
-      $("#sentiment-summary").textContent = `${goodCount} Good · ${normalCount} Normal · ${badCount} Tough · ${highImpactCount} Major`;
+      $("#average-rating").innerHTML = `${goodPct}% <small>positive</small>`;
+      const impactLabel = avgImpact !== "—" ? `${avgImpact}★ impact` : "";
+      const countLabel = `${total} ${total === 1 ? "moment" : "moments"}`;
+      $("#sentiment-summary").textContent = impactLabel ? `${impactLabel} · ${countLabel}` : countLabel;
     } else {
       if (splitGood) splitGood.style.width = "0%";
       if (splitNormal) splitNormal.style.width = "0%";
