@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f7fb" />
+    <title>Gather — Personal Moment & Event Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview" aria-label="Gather home">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <span>gather<span class="brand-dot">.</span></span>
+        </a>
+
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a class="nav-link active" id="nav-overview" href="#overview"><span class="nav-icon">▦</span> Overview</a>
+          <a class="nav-link" id="nav-events" href="#events"><span class="nav-icon">◷</span> All events <span class="nav-count" id="sidebar-event-count">0</span></a>
+        </nav>
+
+        <div class="sidebar-section-heading">
+          <span>CATEGORIES</span>
+          <button class="icon-button small" id="add-category-button" title="Add category" aria-label="Add category">+</button>
+        </div>
+        <div class="category-nav" id="category-nav"></div>
+
+        <div class="sidebar-bottom">
+          <button class="nav-link import-link" id="import-button" type="button" aria-label="Import backup" title="Import backup">
+            <span class="nav-icon" aria-hidden="true">↥</span> Import backup
+          </button>
+          <input type="file" id="import-file" accept="application/json,.json" hidden />
+
+          <div class="profile" id="profile-card" role="button" tabindex="0" title="Click to rename your space">
+            <div class="avatar" id="user-avatar">Y</div>
+            <div class="profile-copy">
+              <strong id="user-space-name">Your space</strong>
+              <span id="user-space-sub">Personal tracker · Edit</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb">
+            <span>Workspace</span>
+            <span class="crumb-slash">/</span>
+            <strong id="breadcrumb-current">Overview</strong>
+          </div>
+          <div class="topbar-actions">
+            <span class="today-label" id="today-label"></span>
+            <button class="button button-quiet theme-toggle" id="theme-toggle" type="button" aria-pressed="false" title="Switch theme (Press D)">
+              <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+              <span class="theme-toggle-label">Dark mode</span>
+            </button>
+            <button class="button button-quiet" id="export-button" title="Export events to JSON backup">
+              <span aria-hidden="true">↧</span> Export JSON
+            </button>
+            <button class="button button-primary" id="open-event-modal" title="Log a detailed event (Press N)">
+              <span class="button-plus">+</span> Log an event
+            </button>
+          </div>
+        </header>
+
+        <div class="page-wrap">
+          <!-- TAB 1: OVERVIEW PAGE -->
+          <section class="tab-view active" id="tab-overview">
+            <section class="welcome-row">
+              <div>
+                <p class="eyebrow" id="welcome-eyebrow">YOUR PERSONAL MOMENTUM</p>
+                <h1>Make moments <span>count.</span></h1>
+                <p class="welcome-subtitle" id="welcome-subtitle">A mindful perspective on everything you experience.</p>
+              </div>
+              <div class="date-pill">
+                <span class="date-sparkle">✳</span>
+                <span id="date-range-label">Your all-time activity</span>
+              </div>
+            </section>
+
+            <section class="stats-grid" aria-label="Event summary">
+              <article class="stat-card">
+                <div class="stat-top">
+                  <span class="stat-label">TOTAL EVENTS</span>
+                  <span class="stat-icon purple">◷</span>
+                </div>
+                <div class="stat-value" id="total-events">0</div>
+                <div class="stat-foot">
+                  <span class="stat-dot purple-dot"></span>
+                  <span>Moments logged</span>
+                </div>
+              </article>
+
+              <article class="stat-card">
+                <div class="stat-top">
+                  <span class="stat-label">CURRENT STREAK</span>
+                  <span class="stat-icon peach">⚡</span>
+                </div>
+                <div class="stat-value" id="streak-value">0 <small>days</small></div>
+                <div class="stat-foot">
+                  <span class="stat-dot peach-dot"></span>
+                  <span id="streak-label">Start logging to build streak</span>
+                </div>
+              </article>
+
+              <article class="stat-card">
+                <div class="stat-top">
+                  <span class="stat-label">SENTIMENT PULSE</span>
+                  <span class="stat-icon yellow">◉</span>
+                </div>
+                <div class="stat-value" id="average-rating">—</div>
+                <div class="sentiment-split-bar" id="sentiment-split-bar">
+                  <div class="sentiment-split-good" id="split-good" style="width: 0%"></div>
+                  <div class="sentiment-split-normal" id="split-normal" style="width: 0%"></div>
+                  <div class="sentiment-split-bad" id="split-bad" style="width: 0%"></div>
+                </div>
+                <div class="stat-foot">
+                  <span class="stat-dot yellow-dot"></span>
+                  <span id="sentiment-summary">Across all your events</span>
+                </div>
+              </article>
+
+              <article class="stat-card">
+                <div class="stat-top">
+                  <span class="stat-label">TOP CATEGORY</span>
+                  <span class="stat-icon mint">✳</span>
+                </div>
+                <div class="stat-value stat-category" id="top-category">—</div>
+                <div class="stat-foot">
+                  <span class="stat-dot mint-dot"></span>
+                  <span id="top-category-count">Build your first highlight</span>
+                </div>
+              </article>
+            </section>
+
+            <!-- Quick Log Bar -->
+            <section class="quick-add-section">
+              <form class="quick-add-card" id="quick-add-form">
+                <div class="quick-add-header">
+                  <div class="quick-add-badge">
+                    <span class="quick-add-pulse"></span>
+                    <strong>Quick Log</strong>
+                  </div>
+                  <span class="quick-add-subtext">Record a moment in seconds · press <kbd>Enter</kbd> to save</span>
+                </div>
+                <div class="quick-add-controls">
+                  <div class="quick-input-wrap">
+                    <span class="quick-input-icon">✦</span>
+                    <input type="text" id="quick-title" placeholder="What happened? (e.g. Finished presentation, completed 5k run)" maxlength="100" autocomplete="off" />
+                  </div>
+                  <div class="quick-sentiment-pills" role="radiogroup" aria-label="Select moment sentiment">
+                    <button type="button" class="quick-sentiment-pill good selected" data-quick-sentiment="good" role="radio" aria-checked="true" title="Good">
+                      <span>☀</span> Good
+                    </button>
+                    <button type="button" class="quick-sentiment-pill normal" data-quick-sentiment="normal" role="radio" aria-checked="false" title="Normal">
+                      <span>◒</span> Normal
+                    </button>
+                    <button type="button" class="quick-sentiment-pill bad" data-quick-sentiment="bad" role="radio" aria-checked="false" title="Tough">
+                      <span>☁</span> Tough
+                    </button>
+                  </div>
+                  <div class="select-wrap quick-category-wrap">
+                    <select id="quick-category" aria-label="Quick log category"></select>
+                    <span class="select-chevron" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                  <button type="submit" class="button button-primary quick-submit-btn" id="quick-submit">
+                    Log moment <span aria-hidden="true">↵</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="content-grid">
+              <article class="panel activity-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h2>Your activity</h2>
+                    <p>See how your moments add up over time.</p>
+                  </div>
+                  <div class="select-wrap">
+                    <select id="chart-period" aria-label="Activity chart period">
+                      <option value="6">Last 6 months</option>
+                      <option value="12">Last 12 months</option>
+                    </select>
+                    <span class="select-chevron" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="chart-legend-row">
+                  <div class="chart-legend">
+                    <span class="legend-dot"></span>
+                    <span class="legend-text">Moments logged</span>
+                  </div>
+                  <div class="chart-summary-chips" id="chart-summary-chips">
+                    <span class="chart-stat-chip"><span id="chart-stat-total">0</span> in view</span>
+                    <span class="chart-stat-chip"><span id="chart-stat-avg">0.0</span>/mo avg</span>
+                    <span class="chart-stat-chip peak-chip">Peak: <span id="chart-stat-peak">-</span></span>
+                  </div>
+                </div>
+                <div class="chart-container" id="chart-container">
+                  <div class="chart-empty" id="chart-empty">
+                    <span class="empty-chart-icon">⌁</span>
+                    <strong>Your story starts here</strong>
+                    <span>Log an event to see your activity take shape.</span>
+                  </div>
+                  <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+                  <svg id="activity-chart" role="img" aria-label="Events logged by month"></svg>
+                </div>
+              </article>
+
+              <article class="panel category-panel">
+                <div class="panel-heading">
+                  <div>
+                    <h2>By category</h2>
+                    <p>What have you been up to?</p>
+                  </div>
+                  <span class="panel-menu-icon">···</span>
+                </div>
+                <div class="category-breakdown" id="category-breakdown"></div>
+              </article>
+            </section>
+
+            <!-- Overview Recent Highlights Banner -->
+            <section class="overview-recent-strip">
+              <div class="overview-recent-head">
+                <div>
+                  <h3>Latest Highlights</h3>
+                  <p>Recent moments logged in your workspace</p>
+                </div>
+                <button type="button" class="button button-quiet" id="goto-events-btn">View all events →</button>
+              </div>
+              <div class="overview-recent-list" id="overview-recent-list"></div>
+            </section>
+          </section>
+
+          <!-- TAB 2: ALL EVENTS PAGE (Dedicated Tab) -->
+          <section class="tab-view" id="tab-events" hidden>
+            <div class="events-page-header">
+              <div>
+                <p class="eyebrow">COMPLETE HISTORY</p>
+                <h2>All Events <span class="event-total-badge" id="recent-count">0</span></h2>
+                <p class="events-page-subtitle">Search, filter, and review every logged milestone in your timeline.</p>
+              </div>
+              <button class="button button-primary" id="events-tab-add-btn">
+                <span class="button-plus">+</span> Log an event
+              </button>
+            </div>
+
+            <section class="panel events-panel">
+              <div class="events-heading">
+                <div class="sentiment-filter-bar" role="radiogroup" aria-label="Filter events by sentiment">
+                  <button type="button" class="sentiment-chip active" data-sentiment-filter="all">All</button>
+                  <button type="button" class="sentiment-chip chip-good" data-sentiment-filter="good">☀ Good</button>
+                  <button type="button" class="sentiment-chip chip-normal" data-sentiment-filter="normal">◒ Normal</button>
+                  <button type="button" class="sentiment-chip chip-bad" data-sentiment-filter="bad">☁ Tough</button>
+                </div>
+                <div class="event-tools">
+                  <label class="search-box">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="event-search" placeholder="Search events..." aria-label="Search events" />
+                  </label>
+                  <div class="select-wrap filter-select-wrap">
+                    <select id="category-filter" aria-label="Filter events by category">
+                      <option value="all">All categories</option>
+                    </select>
+                    <span class="select-chevron" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="event-list" id="event-list"></div>
+              <div class="list-footer" id="list-footer"></div>
+            </section>
+          </section>
+
+          <footer class="page-footer">
+            <span>Made for the moments that matter.</span>
+            <span>Gather <span class="footer-heart">✳</span></span>
+          </footer>
+        </div>
+      </main>
+    </div>
+
+    <!-- First Time Username / Space Setup Modal -->
+    <div class="modal-backdrop" id="onboarding-modal-backdrop" hidden>
+      <section class="modal onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">WELCOME TO GATHER</p>
+            <h2 id="onboarding-title">Name your space</h2>
+          </div>
+        </div>
+        <p class="onboarding-desc">What should we call your personal space? You can change this anytime.</p>
+        <form id="onboarding-form">
+          <label class="field-label" for="onboarding-input">Your Space Name</label>
+          <input class="text-input" id="onboarding-input" maxlength="28" placeholder="e.g. Rodey's Space, Alex, My Journal" required />
+          <div class="modal-actions">
+            <button class="button button-primary" type="submit" id="onboarding-submit">Continue to Gather →</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Event Modal (Clean & Simple) -->
+    <div class="modal-backdrop" id="event-modal-backdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">A MOMENT WORTH KEEPING</p>
+            <h2 id="modal-title">Log an event</h2>
+          </div>
+          <button class="icon-button close-button" data-close-modal aria-label="Close dialog">×</button>
+        </div>
+        <form id="event-form">
+          <label class="field-label" for="event-title">Title <span>*</span></label>
+          <input class="text-input" id="event-title" name="title" maxlength="100" placeholder="e.g. Completed marathon or deep work sprint" required />
+
+          <div class="form-row">
+            <div class="form-field">
+              <label class="field-label" for="event-category">Category</label>
+              <div class="select-wrap modal-select-wrap">
+                <select class="text-input" id="event-category" name="category"></select>
+                <span class="select-chevron" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </div>
+            </div>
+            <div class="form-field">
+              <label class="field-label" for="event-date">Date</label>
+              <input class="text-input" id="event-date" name="date" type="date" required />
+            </div>
+          </div>
+
+          <fieldset class="sentiment-fieldset">
+            <legend class="field-label">How did it feel?</legend>
+            <div class="sentiment-picker" id="sentiment-picker" role="radiogroup" aria-label="Choose an event sentiment"></div>
+          </fieldset>
+
+          <label class="field-label" for="event-notes">Notes & Reflection <span class="optional-label">OPTIONAL</span></label>
+          <textarea class="text-input notes-input" id="event-notes" name="notes" rows="3" maxlength="500" placeholder="What made this moment memorable or what did you learn?"></textarea>
+
+          <div class="form-error" id="form-error" role="alert"></div>
+
+          <div class="modal-actions">
+            <button class="button button-quiet" type="button" data-close-modal>Cancel</button>
+            <button class="button button-primary" type="submit" id="save-event-button">
+              Save event <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Custom Dialog for Category Creation & Delete Confirmations -->
+    <div class="modal-backdrop" id="custom-dialog-backdrop" hidden>
+      <section class="modal custom-dialog" role="alertdialog" aria-modal="true" aria-labelledby="custom-dialog-title" aria-describedby="custom-dialog-message">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow" id="custom-dialog-eyebrow">GATHER</p>
+            <h2 id="custom-dialog-title"></h2>
+          </div>
+          <button class="icon-button close-button" id="custom-dialog-close" aria-label="Close dialog">×</button>
+        </div>
+        <p class="custom-dialog-message" id="custom-dialog-message"></p>
+        <label class="field-label custom-dialog-input-label" id="custom-dialog-input-label" for="custom-dialog-input"></label>
+        <input class="text-input custom-dialog-input" id="custom-dialog-input" maxlength="30" />
+        <p class="custom-dialog-error" id="custom-dialog-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button class="button button-quiet" id="custom-dialog-cancel" type="button">Cancel</button>
+          <button class="button button-primary" id="custom-dialog-confirm" type="button">Confirm</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
