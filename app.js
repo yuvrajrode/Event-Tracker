@@ -1,6 +1,14 @@
 (() => {
   "use strict";
 
+  const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+  const storage = isBrowser && typeof localStorage !== "undefined" ? localStorage : {
+    _data: {},
+    getItem(k) { return this._data[k] ?? null; },
+    setItem(k, v) { this._data[k] = String(v); },
+    removeItem(k) { delete this._data[k]; }
+  };
+
   const STORAGE_KEY = "gather.events.v1";
   const CATEGORIES_KEY = "gather.categories.v1";
   const THEME_KEY = "gather.theme.v1";
@@ -12,6 +20,14 @@
     bad: { label: "Tough", icon: "☁", className: "bad" }
   };
 
+  const IMPACTS = {
+    1: { level: 1, label: "Minor", hint: "Small routine win or slight annoyance", dots: "●○○○○" },
+    2: { level: 2, label: "Noticeable", hint: "Notable moment in your day", dots: "●●○○○" },
+    3: { level: 3, label: "Moderate", hint: "Meaningful milestone or test", dots: "●●●○○" },
+    4: { level: 4, label: "Significant", hint: "High-impact achievement or event", dots: "●●●●○" },
+    5: { level: 5, label: "Major", hint: "Life-changing or unforgettable moment", dots: "●●●●●" }
+  };
+
   const DEFAULT_CATEGORIES = [
     { name: "Work", color: "#6366f1", icon: "↗", tint: "rgba(99, 102, 241, 0.12)" },
     { name: "Personal", color: "#ec4899", icon: "♡", tint: "rgba(236, 72, 153, 0.12)" },
@@ -21,12 +37,12 @@
     { name: "Travel", color: "#06b6d4", icon: "⌖", tint: "rgba(6, 182, 212, 0.12)" }
   ];
 
-  const $ = (selector) => document.querySelector(selector);
-  const $$ = (selector) => document.querySelectorAll(selector);
+  const $ = (selector) => isBrowser ? document.querySelector(selector) : null;
+  const $$ = (selector) => isBrowser ? document.querySelectorAll(selector) : [];
 
   function loadJson(key, fallback) {
     try {
-      const val = localStorage.getItem(key);
+      const val = storage.getItem(key);
       return val ? JSON.parse(val) : structuredClone(fallback);
     } catch (e) {
       console.error(`Could not read ${key}`, e);
@@ -35,7 +51,9 @@
   }
 
   function generateId() {
-    return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   function localDateString(date = new Date()) {
@@ -66,11 +84,26 @@
     })[c]);
   }
 
+  function renderImpactBadge(impact) {
+    const parsed = Number(impact);
+    const val = Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 3;
+    const def = IMPACTS[val] || IMPACTS[3];
+    return `<span class="event-impact impact-${val}" title="Impact: ${val}/5 (${def.label}) — ${def.hint}">
+      <span class="impact-dots" aria-hidden="true">${def.dots}</span>
+      <span class="impact-text">Impact ${val}/5 · ${def.label}</span>
+    </span>`;
+  }
+
   function normalizeEvent(e) {
     if (!e || typeof e !== "object") return e;
     const sentiment = ["good", "normal", "bad"].includes(e.sentiment)
       ? e.sentiment
       : (e.rating && e.rating <= 2 ? "bad" : "good");
+
+    const parsedImpact = Number(e.impact);
+    const impact = Number.isInteger(parsedImpact) && parsedImpact >= 1 && parsedImpact <= 5
+      ? parsedImpact
+      : 3;
 
     return {
       id: e.id || generateId(),
@@ -78,6 +111,7 @@
       category: e.category || "Personal",
       date: /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : localDateString(),
       sentiment,
+      impact,
       notes: typeof e.notes === "string" ? e.notes : "",
       createdAt: Number.isFinite(e.createdAt) ? e.createdAt : Date.now()
     };
@@ -90,13 +124,15 @@
 
   let selectedSentiment = "good";
   let selectedQuickSentiment = "good";
+  let selectedImpact = 3;
+  let selectedQuickImpact = 3;
   let activeCategory = "all";
   let activeSentimentFilter = "all";
   let editingId = null;
   let customDialogResolve = null;
   let toastTimer;
   let activeTab = "overview";
-  let username = localStorage.getItem(USERNAME_KEY) || "";
+  let username = storage.getItem(USERNAME_KEY) || "";
 
   const els = {
     tabOverview: $("#tab-overview"),
@@ -128,6 +164,8 @@
     date: $("#event-date"),
     notes: $("#event-notes"),
     sentimentPicker: $("#sentiment-picker"),
+    impactPicker: $("#impact-picker"),
+    modalImpactDesc: $("#modal-impact-desc"),
     chart: $("#activity-chart"),
     chartEmpty: $("#chart-empty"),
     chartTooltip: $("#chart-tooltip"),
@@ -138,8 +176,8 @@
 
   function saveData() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-      localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+      storage.setItem(STORAGE_KEY, JSON.stringify(events));
+      storage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
       return true;
     } catch (e) {
       console.error("Storage save failed", e);
@@ -186,7 +224,7 @@
     }).then((newName) => {
       if (newName && typeof newName === "string" && newName.trim()) {
         username = newName.trim();
-        localStorage.setItem(USERNAME_KEY, username);
+        storage.setItem(USERNAME_KEY, username);
         updateUsernameUI(username);
         showToast("Space name updated.");
       }
@@ -578,7 +616,10 @@
             </div>
             <span class="event-category">${escapeHtml(event.category)}</span>
             <time class="event-date" datetime="${escapeHtml(event.date)}">${escapeHtml(formatDate(event.date))}</time>
-            <span class="event-sentiment ${sentiment.className}">${sentiment.icon} ${sentiment.label}</span>
+            <div class="event-meta-badges">
+              <span class="event-sentiment ${sentiment.className}">${sentiment.icon} ${sentiment.label}</span>
+              ${renderImpactBadge(event.impact)}
+            </div>
             <span class="event-actions">
               <button class="event-action" data-edit="${escapeHtml(event.id)}" aria-label="Edit" title="Edit">✎</button>
               <button class="event-action" data-delete="${escapeHtml(event.id)}" aria-label="Delete" title="Delete">×</button>
@@ -612,7 +653,10 @@
               <div class="overview-recent-item-meta">${escapeHtml(cat.name)} · ${escapeHtml(formatDate(item.date))}</div>
             </div>
           </div>
-          <span class="event-sentiment ${s.className}">${s.icon} ${s.label}</span>
+          <div class="event-meta-badges">
+            <span class="event-sentiment ${s.className}">${s.icon} ${s.label}</span>
+            ${renderImpactBadge(item.impact)}
+          </div>
         </div>`;
     }).join("");
   }
@@ -827,6 +871,7 @@
         category: category || "Personal",
         date: localDateString(),
         sentiment: selectedQuickSentiment,
+        impact: selectedQuickImpact,
         notes: "",
         createdAt: Date.now()
       };
@@ -851,6 +896,18 @@
     });
   });
 
+  // Quick Impact Toggle (1 to 5)
+  $$("[data-quick-impact]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedQuickImpact = Number(btn.dataset.quickImpact) || 3;
+      $$("[data-quick-impact]").forEach((b) => {
+        const isSel = Number(b.dataset.quickImpact) === selectedQuickImpact;
+        b.classList.toggle("selected", isSel);
+        b.setAttribute("aria-checked", String(isSel));
+      });
+    });
+  });
+
   // Sentiment Filter Chips
   $$("[data-sentiment-filter]").forEach((chip) => {
     chip.addEventListener("click", () => {
@@ -868,6 +925,24 @@
     ).join("");
   }
 
+  function renderImpactPicker() {
+    if (!els.impactPicker) return;
+    els.impactPicker.innerHTML = Object.values(IMPACTS).map((imp) => {
+      const isSel = selectedImpact === imp.level;
+      return `
+        <button type="button" class="impact-option ${isSel ? "selected" : ""}" data-impact="${imp.level}" role="radio" aria-checked="${String(isSel)}" title="Level ${imp.level}: ${imp.label} — ${imp.hint}">
+          <span class="impact-num">${imp.level}</span>
+          <span class="impact-name">${escapeHtml(imp.label)}</span>
+          <span class="impact-dots-mini">${escapeHtml(imp.dots)}</span>
+        </button>`;
+    }).join("");
+
+    if (els.modalImpactDesc) {
+      const def = IMPACTS[selectedImpact] || IMPACTS[3];
+      els.modalImpactDesc.textContent = `Level ${selectedImpact}: ${def.label} · ${def.hint}`;
+    }
+  }
+
   function openModal(event = null) {
     editingId = event?.id ?? null;
     $("#modal-title").textContent = event ? "Edit event" : "Log an event";
@@ -879,9 +954,11 @@
     els.date.value = event?.date || localDateString();
     els.notes.value = event?.notes || "";
     selectedSentiment = event?.sentiment || "good";
+    selectedImpact = Number(event?.impact) || 3;
     els.formError.textContent = "";
 
     renderSentimentPicker();
+    renderImpactPicker();
     els.modalBackdrop.hidden = false;
     document.body.style.overflow = "hidden";
     setTimeout(() => els.title.focus(), 30);
@@ -914,7 +991,7 @@
     const current = document.documentElement.dataset.theme || "light";
     const next = current === "dark" ? "light" : "dark";
     try {
-      localStorage.setItem(THEME_KEY, next);
+      storage.setItem(THEME_KEY, next);
     } catch (e) {
       console.error(e);
     }
@@ -956,11 +1033,12 @@
     resolveCustomDialog(null);
   }
 
-  // TAB EVENTS & NAVIGATION
-  els.navOverview?.addEventListener("click", (e) => {
-    e.preventDefault();
-    switchTab("overview");
-  });
+  if (isBrowser) {
+    // TAB EVENTS & NAVIGATION
+    els.navOverview?.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchTab("overview");
+    });
 
   els.navEvents?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -989,7 +1067,7 @@
     e.preventDefault();
     const val = els.onboardingInput.value.trim();
     username = val || "Your space";
-    localStorage.setItem(USERNAME_KEY, username);
+    storage.setItem(USERNAME_KEY, username);
     updateUsernameUI(username);
     els.onboardingModal.hidden = true;
     document.body.style.overflow = "";
@@ -1042,14 +1120,21 @@
     if (e.target === els.modalBackdrop) closeModal();
   });
 
-  els.sentimentPicker.addEventListener("click", (e) => {
+  els.sentimentPicker?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-sentiment]");
     if (!btn) return;
     selectedSentiment = btn.dataset.sentiment;
     renderSentimentPicker();
   });
 
-  els.eventForm.addEventListener("submit", (e) => {
+  els.impactPicker?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-impact]");
+    if (!btn) return;
+    selectedImpact = Number(btn.dataset.impact) || 3;
+    renderImpactPicker();
+  });
+
+  els.eventForm?.addEventListener("submit", (e) => {
     e.preventDefault();
     const title = els.title.value.trim();
     const date = els.date.value;
@@ -1065,6 +1150,7 @@
       category: els.categorySelect.value,
       date,
       sentiment: selectedSentiment,
+      impact: selectedImpact,
       notes: els.notes.value.trim(),
       createdAt: existing?.createdAt || Date.now()
     };
@@ -1226,15 +1312,27 @@
     }
   });
 
-  // Initialize
-  initCustomSelect($("#chart-period"), false);
-  initCustomSelect(els.quickCategorySelect, true);
-  initCustomSelect(els.categoryFilter, true);
-  initCustomSelect(els.categorySelect, true);
+    // Initialize
+    initCustomSelect($("#chart-period"), false);
+    initCustomSelect(els.quickCategorySelect, true);
+    initCustomSelect(els.categoryFilter, true);
+    initCustomSelect(els.categorySelect, true);
 
-  applyTheme(localStorage.getItem(THEME_KEY) || "light");
-  checkFirstTimeUser();
-  const initialTab = window.location.hash === "#events" ? "events" : "overview";
-  switchTab(initialTab);
-  render();
+    applyTheme(storage.getItem(THEME_KEY) || "light");
+    checkFirstTimeUser();
+    const initialTab = window.location.hash === "#events" ? "events" : "overview";
+    switchTab(initialTab);
+    render();
+  }
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      normalizeEvent,
+      IMPACTS,
+      renderImpactBadge,
+      calculateStreak,
+      getTimelineGroup,
+      escapeHtml
+    };
+  }
 })();

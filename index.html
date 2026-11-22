@@ -164,6 +164,14 @@
                       <span>☁</span> Tough
                     </button>
                   </div>
+                  <div class="quick-impact-wrap" role="radiogroup" aria-label="Select moment impact (1 to 5)">
+                    <span class="quick-impact-label" title="How big was this moment's impact on your day?">Impact:</span>
+                    <button type="button" class="quick-impact-pill" data-quick-impact="1" role="radio" aria-checked="false" title="1 - Minor (Routine win or minor trouble)">1</button>
+                    <button type="button" class="quick-impact-pill" data-quick-impact="2" role="radio" aria-checked="false" title="2 - Noticeable">2</button>
+                    <button type="button" class="quick-impact-pill selected" data-quick-impact="3" role="radio" aria-checked="true" title="3 - Moderate (Meaningful milestone)">3</button>
+                    <button type="button" class="quick-impact-pill" data-quick-impact="4" role="radio" aria-checked="false" title="4 - Significant">4</button>
+                    <button type="button" class="quick-impact-pill" data-quick-impact="5" role="radio" aria-checked="false" title="5 - Major (Life milestone)">5</button>
+                  </div>
                   <div class="select-wrap quick-category-wrap">
                     <select id="quick-category" aria-label="Quick log category"></select>
                     <span class="select-chevron" aria-hidden="true">
@@ -343,6 +351,14 @@
           <fieldset class="sentiment-fieldset">
             <legend class="field-label">How did it feel?</legend>
             <div class="sentiment-picker" id="sentiment-picker" role="radiogroup" aria-label="Choose an event sentiment"></div>
+          </fieldset>
+
+          <fieldset class="impact-fieldset">
+            <legend class="field-label">
+              <span>Impact on you (1 to 5)</span>
+              <span class="impact-hint-badge" id="modal-impact-desc">Level 3: Moderate · Meaningful milestone</span>
+            </legend>
+            <div class="impact-picker" id="impact-picker" role="radiogroup" aria-label="Choose event impact from 1 to 5"></div>
           </fieldset>
 
           <label class="field-label" for="event-notes">Notes & Reflection <span class="optional-label">OPTIONAL</span></label>
