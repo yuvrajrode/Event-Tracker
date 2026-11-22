@@ -84,6 +84,69 @@
     })[c]);
   }
 
+  function escapeRegExp(str) {
+    return String(str ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function highlightMatches(text, query) {
+    const escaped = escapeHtml(text ?? "");
+    if (!query || typeof query !== "string") return escaped;
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return escaped;
+
+    const regex = new RegExp(`(${escapeRegExp(cleanQuery)})`, "gi");
+    return escaped.replace(regex, '<mark class="search-match">$1</mark>');
+  }
+
+  function debounce(fn, wait = 150) {
+    let timeoutId;
+    return function (...args) {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn.apply(this, args), wait);
+    };
+  }
+
+  function matchesDateFilter(dateStr, filterValue) {
+    if (!filterValue || filterValue === "all") return true;
+    const today = new Date();
+    const eventDate = dateFromISO(dateStr);
+
+    const msPerDay = 86400000;
+    const utcToday = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const utcEvent = Date.UTC(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+    const dayDiff = Math.round((utcToday - utcEvent) / msPerDay);
+
+    switch (filterValue) {
+      case "today":
+        return dayDiff === 0;
+      case "week":
+        return dayDiff >= 0 && dayDiff <= 7;
+      case "month":
+        return eventDate.getFullYear() === today.getFullYear() && eventDate.getMonth() === today.getMonth();
+      case "30days":
+        return dayDiff >= 0 && dayDiff <= 30;
+      case "year":
+        return eventDate.getFullYear() === today.getFullYear();
+      default:
+        return true;
+    }
+  }
+
+  function matchesImpactFilter(impact, filterValue) {
+    if (!filterValue || filterValue === "all") return true;
+    const val = Number(impact) || 3;
+    switch (filterValue) {
+      case "high":
+        return val >= 4;
+      case "moderate":
+        return val === 3;
+      case "low":
+        return val <= 2;
+      default:
+        return true;
+    }
+  }
+
   function renderImpactBadge(impact) {
     const parsed = Number(impact);
     const val = Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 3;
@@ -153,6 +216,8 @@
     categoryNav: $("#category-nav"),
     categoryBreakdown: $("#category-breakdown"),
     categoryFilter: $("#category-filter"),
+    dateFilter: $("#date-filter"),
+    impactFilter: $("#impact-filter"),
     categorySelect: $("#event-category"),
     quickCategorySelect: $("#quick-category"),
     eventList: $("#event-list"),
@@ -556,15 +621,20 @@
   }
 
   function visibleEvents() {
-    const q = $("#event-search").value.trim().toLowerCase();
-    const filterCat = els.categoryFilter.value;
+    const searchInput = $("#event-search");
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const filterCat = els.categoryFilter ? els.categoryFilter.value : "all";
+    const filterDate = els.dateFilter ? els.dateFilter.value : "all";
+    const filterImpact = els.impactFilter ? els.impactFilter.value : "all";
 
     return events.filter((e) => {
       const matchCat = filterCat === "all" || e.category === filterCat;
       const matchSide = activeCategory === "all" || e.category === activeCategory;
       const matchMood = activeSentimentFilter === "all" || e.sentiment === activeSentimentFilter;
+      const matchDate = matchesDateFilter(e.date, filterDate);
+      const matchImpact = matchesImpactFilter(e.impact, filterImpact);
       const matchSearch = !q || `${e.title} ${e.category} ${e.notes}`.toLowerCase().includes(q);
-      return matchCat && matchSide && matchMood && matchSearch;
+      return matchCat && matchSide && matchMood && matchDate && matchImpact && matchSearch;
     }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
   }
 
@@ -612,13 +682,26 @@
 
   function renderEvents() {
     const shown = visibleEvents();
+    const searchVal = $("#event-search")?.value.trim() || "";
+    const filterCat = els.categoryFilter ? els.categoryFilter.value : "all";
+    const filterDate = els.dateFilter ? els.dateFilter.value : "all";
+    const filterImpact = els.impactFilter ? els.impactFilter.value : "all";
+
+    const isFiltered = events.length > 0 && (
+      activeCategory !== "all" ||
+      filterCat !== "all" ||
+      activeSentimentFilter !== "all" ||
+      filterDate !== "all" ||
+      filterImpact !== "all" ||
+      searchVal
+    );
+
     if (!shown.length) {
-      const isFiltered = events.length > 0 && (activeCategory !== "all" || els.categoryFilter.value !== "all" || activeSentimentFilter !== "all" || $("#event-search").value.trim());
       els.eventList.innerHTML = `
         <div class="empty-list">
           <div class="empty-list-icon">${isFiltered ? "⌕" : "✳"}</div>
           <strong>${isFiltered ? "No matching events" : "No moments logged yet"}</strong>
-          <p>${isFiltered ? "Try a different search or filter." : "Use the Quick Log on the Overview page or click '+ Log an event' to start."}</p>
+          <p>${isFiltered ? "Try adjusting your search, impact, or date filter." : "Use the Quick Log on the Overview page or click '+ Log an event' to start."}</p>
           ${!isFiltered ? `<button class="button button-primary" data-empty-add>Log your first event <span aria-hidden="true">↗</span></button>` : ""}
         </div>`;
       els.listFooter.textContent = "";
@@ -637,7 +720,8 @@
       html += `<div class="timeline-group-header"><span>${escapeHtml(groupName)}</span></div>`;
       groupEvents.forEach((event) => {
         const cat = categoryFor(event.category);
-        const notes = event.notes ? `<div class="event-notes">${escapeHtml(event.notes)}</div>` : "";
+        const titleHtml = highlightMatches(event.title, searchVal);
+        const notesHtml = event.notes ? `<div class="event-notes">${highlightMatches(event.notes, searchVal)}</div>` : "";
         const sentiment = SENTIMENTS[event.sentiment] || SENTIMENTS.normal;
 
         html += `
@@ -645,8 +729,8 @@
             <div class="event-main">
               <span class="event-category-icon" style="color:${escapeHtml(cat.color)};background:${escapeHtml(cat.tint)}">${escapeHtml(cat.icon)}</span>
               <div class="event-title-wrap">
-                <div class="event-title">${escapeHtml(event.title)}</div>
-                ${notes}
+                <div class="event-title">${titleHtml}</div>
+                ${notesHtml}
               </div>
             </div>
             <span class="event-category">${escapeHtml(event.category)}</span>
@@ -1364,13 +1448,17 @@
     switchTab("events");
   });
 
-  els.categoryFilter.addEventListener("change", () => {
+  els.categoryFilter?.addEventListener("change", () => {
     activeCategory = els.categoryFilter.value;
     renderCategoryControls();
     renderEvents();
   });
 
-  $("#event-search").addEventListener("input", renderEvents);
+  els.dateFilter?.addEventListener("change", renderEvents);
+  els.impactFilter?.addEventListener("change", renderEvents);
+
+  const debouncedRenderEvents = debounce(renderEvents, 150);
+  $("#event-search")?.addEventListener("input", debouncedRenderEvents);
   $("#chart-period").addEventListener("change", renderChart);
 
   els.eventList.addEventListener("click", async (e) => {
@@ -1522,6 +1610,8 @@
     initCustomSelect($("#chart-period"), false);
     initCustomSelect(els.quickCategorySelect, true);
     initCustomSelect(els.categoryFilter, true);
+    initCustomSelect(els.dateFilter, false);
+    initCustomSelect(els.impactFilter, false);
     initCustomSelect(els.categorySelect, true);
 
     applyTheme(storage.getItem(THEME_KEY) || "light");
@@ -1540,7 +1630,11 @@
       getTimelineGroup,
       mergeEvents,
       reassignCategoryEvents,
-      escapeHtml
+      escapeHtml,
+      highlightMatches,
+      debounce,
+      matchesDateFilter,
+      matchesImpactFilter
     };
   }
 })();

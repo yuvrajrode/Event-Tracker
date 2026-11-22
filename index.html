@@ -276,6 +276,30 @@
                     <input type="search" id="event-search" placeholder="Search events..." aria-label="Search events" />
                   </label>
                   <div class="select-wrap filter-select-wrap">
+                    <select id="date-filter" aria-label="Filter events by date range">
+                      <option value="all">All time</option>
+                      <option value="today">Today</option>
+                      <option value="week">Past 7 days</option>
+                      <option value="month">This month</option>
+                      <option value="30days">Past 30 days</option>
+                      <option value="year">This year</option>
+                    </select>
+                    <span class="select-chevron" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                  <div class="select-wrap filter-select-wrap">
+                    <select id="impact-filter" aria-label="Filter events by impact">
+                      <option value="all">All impacts</option>
+                      <option value="high">High (4–5)</option>
+                      <option value="moderate">Moderate (3)</option>
+                      <option value="low">Low (1–2)</option>
+                    </select>
+                    <span class="select-chevron" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                  <div class="select-wrap filter-select-wrap">
                     <select id="category-filter" aria-label="Filter events by category">
                       <option value="all">All categories</option>
                     </select>
