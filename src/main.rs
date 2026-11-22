@@ -4,7 +4,7 @@ use std::thread;
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::WindowBuilder,
 };
 use tiny_http::{Header, Response, Server, StatusCode};
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // 2. Native Desktop Window & Event Loop with Custom Events
-    let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event().build();
+    let event_loop: EventLoop<CustomEvent> = EventLoopBuilder::with_user_event().build();
 
     let window = WindowBuilder::new()
         .with_title("Gather — Personal Moment & Event Tracker")
@@ -89,15 +89,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let proxy = event_loop.create_proxy();
         thread::spawn(move || unsafe {
+            use windows::Win32::Foundation::HWND;
             use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_CONTROL, MOD_SHIFT};
             use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
 
             // Register Ctrl + Shift + G (0x47 is ASCII for 'G')
-            let _ = RegisterHotKey(None, 101, MOD_CONTROL | MOD_SHIFT, 0x47);
+            let _ = RegisterHotKey(None::<HWND>, 101, MOD_CONTROL | MOD_SHIFT, 0x47);
 
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                if msg.message == WM_HOTKEY && msg.wParam == 101 {
+            while GetMessageW(&mut msg, None::<HWND>, 0, 0).as_bool() {
+                if msg.message == WM_HOTKEY && msg.wParam.0 == 101 {
                     let _ = proxy.send_event(CustomEvent::GlobalQuickAdd);
                 }
             }
