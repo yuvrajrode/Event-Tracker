@@ -300,6 +300,7 @@
     if (!username) {
       els.onboardingModal.hidden = false;
       document.body.style.overflow = "hidden";
+      trapFocus(els.onboardingModal);
       setTimeout(() => els.onboardingInput.focus(), 40);
     } else {
       updateUsernameUI(username);
@@ -1157,6 +1158,69 @@
     }
   }
 
+  const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]):not([hidden]), input:not([disabled]):not([hidden]):not([type="hidden"]), select:not([disabled]):not([hidden]), textarea:not([disabled]):not([hidden]), [tabindex]:not([tabindex="-1"])';
+
+  function getFocusableSelectors() {
+    return FOCUSABLE_SELECTOR;
+  }
+
+  function getNextFocusableIndex(currentIndex, totalElements, isShiftTab) {
+    if (totalElements <= 0) return 0;
+    if (currentIndex < 0) {
+      return isShiftTab ? totalElements - 1 : 0;
+    }
+    if (isShiftTab) {
+      return currentIndex <= 0 ? totalElements - 1 : currentIndex - 1;
+    }
+    return currentIndex >= totalElements - 1 ? 0 : currentIndex + 1;
+  }
+
+  let focusTrapStack = [];
+
+  function trapFocus(modalEl) {
+    if (!modalEl || typeof document === "undefined") return;
+    const prevFocus = document.activeElement || null;
+
+    const trapHandler = (e) => {
+      if (e.key !== "Tab") return;
+      if (modalEl.hidden) return;
+
+      const focusableSelector = getFocusableSelectors();
+      const rawElements = Array.from(modalEl.querySelectorAll(focusableSelector));
+      const focusables = rawElements.filter((el) => {
+        return !el.disabled && !el.hidden && el.style.display !== "none" && (el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0);
+      });
+
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+
+      const currentIndex = focusables.indexOf(document.activeElement);
+      const nextIndex = getNextFocusableIndex(currentIndex, focusables.length, e.shiftKey);
+      focusables[nextIndex].focus();
+      e.preventDefault();
+    };
+
+    document.addEventListener("keydown", trapHandler);
+    focusTrapStack.push({ modalEl, prevFocus, trapHandler });
+  }
+
+  function releaseFocus() {
+    if (focusTrapStack.length === 0) return;
+    const { modalEl, prevFocus, trapHandler } = focusTrapStack.pop();
+    if (trapHandler && typeof document !== "undefined") {
+      document.removeEventListener("keydown", trapHandler);
+    }
+    if (prevFocus && typeof prevFocus.focus === "function") {
+      try {
+        if (typeof document !== "undefined" && document.body.contains(prevFocus)) {
+          prevFocus.focus();
+        }
+      } catch (_) {}
+    }
+  }
+
   function openModal(event = null) {
     editingId = event?.id ?? null;
     $("#modal-title").textContent = event ? "Edit event" : "Log an event";
@@ -1175,6 +1239,7 @@
     renderImpactPicker();
     els.modalBackdrop.hidden = false;
     document.body.style.overflow = "hidden";
+    trapFocus(els.modalBackdrop);
     setTimeout(() => els.title.focus(), 30);
   }
 
@@ -1182,6 +1247,7 @@
     els.modalBackdrop.hidden = true;
     document.body.style.overflow = "";
     editingId = null;
+    releaseFocus();
   }
 
   function applyTheme(theme) {
@@ -1216,6 +1282,7 @@
     const backdrop = $("#custom-dialog-backdrop");
     backdrop.hidden = true;
     document.body.style.overflow = "";
+    releaseFocus();
     const res = customDialogResolve;
     customDialogResolve = null;
     if (res) res(val);
@@ -1273,6 +1340,7 @@
 
     backdrop.hidden = false;
     document.body.style.overflow = "hidden";
+    trapFocus(backdrop);
 
     const p = new Promise((resolve) => { customDialogResolve = resolve; });
     setTimeout(() => (inputLabel ? input : $("#custom-dialog-confirm")).focus(), 25);
@@ -1321,6 +1389,7 @@
     updateUsernameUI(username);
     els.onboardingModal.hidden = true;
     document.body.style.overflow = "";
+    releaseFocus();
     showToast(`Welcome to ${username}! ✳`);
   });
 
@@ -1732,7 +1801,11 @@
       highlightMatches,
       debounce,
       matchesDateFilter,
-      matchesImpactFilter
+      matchesImpactFilter,
+      getFocusableSelectors,
+      getNextFocusableIndex,
+      trapFocus,
+      releaseFocus
     };
   }
 })();

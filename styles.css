@@ -1724,9 +1724,21 @@ mark.search-match {
   font-size: 14px;
   display: grid;
   place-items: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .event-action:hover { color: var(--brand); background: var(--brand-light); }
+.event-action:focus-visible {
+  color: var(--brand);
+  background: var(--brand-light);
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.event-action[data-delete]:hover,
+.event-action[data-delete]:focus-visible {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  outline-color: #ef4444;
+}
 
 .empty-list {
   padding: 48px 20px 48px;
