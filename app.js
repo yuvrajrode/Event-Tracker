@@ -413,6 +413,204 @@
     return buckets;
   }
 
+  function formatFlashbackTimeAgo(dateStr, referenceDate = new Date()) {
+    if (!dateStr) return "";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const refYear = referenceDate.getFullYear();
+    const yearsAgo = refYear - y;
+    if (yearsAgo >= 1) {
+      return yearsAgo === 1 ? "1 year ago" : `${yearsAgo} years ago`;
+    }
+    const eventTime = new Date(y, m - 1, d).getTime();
+    const refTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate()).getTime();
+    const diffDays = Math.round((refTime - eventTime) / 86400000);
+    if (diffDays >= 170 && diffDays <= 190) return "6 months ago";
+    if (diffDays >= 28 && diffDays <= 32) return "1 month ago";
+    return `${diffDays} days ago`;
+  }
+
+  function findFlashbackEvent(eventsList = events, referenceDate = new Date()) {
+    if (!eventsList || !eventsList.length) return null;
+    const refYear = referenceDate.getFullYear();
+    const refMonth = String(referenceDate.getMonth() + 1).padStart(2, "0");
+    const refDay = String(referenceDate.getDate()).padStart(2, "0");
+    const targetMonthDay = `${refMonth}-${refDay}`;
+
+    const annualMatches = [];
+    for (const ev of eventsList) {
+      if (!ev.date) continue;
+      const [y, m, d] = ev.date.split("-");
+      const eventYear = Number(y);
+      if (eventYear < refYear && `${m}-${d}` === targetMonthDay) {
+        annualMatches.push({
+          ...ev,
+          yearsAgo: refYear - eventYear,
+          timeAgoLabel: formatFlashbackTimeAgo(ev.date, referenceDate)
+        });
+      }
+    }
+
+    if (annualMatches.length > 0) {
+      annualMatches.sort((a, b) => {
+        const impactDiff = (Number(b.impact) || 3) - (Number(a.impact) || 3);
+        if (impactDiff !== 0) return impactDiff;
+        return a.yearsAgo - b.yearsAgo;
+      });
+      return annualMatches[0];
+    }
+
+    const milestoneMatches = [];
+    const refTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate()).getTime();
+    for (const ev of eventsList) {
+      if (!ev.date) continue;
+      const [y, m, d] = ev.date.split("-").map(Number);
+      const evTime = new Date(y, m - 1, d).getTime();
+      const diffDays = Math.round((refTime - evTime) / 86400000);
+      if (diffDays === 182 || diffDays === 183) {
+        milestoneMatches.push({ ...ev, timeAgoLabel: "6 months ago", priority: 2 });
+      } else if (diffDays === 30 || diffDays === 31) {
+        milestoneMatches.push({ ...ev, timeAgoLabel: "1 month ago", priority: 1 });
+      }
+    }
+
+    if (milestoneMatches.length > 0) {
+      milestoneMatches.sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        return (Number(b.impact) || 3) - (Number(a.impact) || 3);
+      });
+      return milestoneMatches[0];
+    }
+
+    return null;
+  }
+
+  function getHeatmapIntensity(dayEvents) {
+    if (!dayEvents || !dayEvents.length) return 0;
+    const count = dayEvents.length;
+    const maxImpact = Math.max(...dayEvents.map((e) => Number(e.impact) || 3));
+
+    if (count >= 4 || (count >= 2 && maxImpact === 5)) return 4;
+    if (count >= 3) return 3;
+    if (count === 2 || maxImpact >= 4) return 2;
+    return 1;
+  }
+
+  function getYearlyHeatmapData(eventsList = events, referenceDate = new Date()) {
+    const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+    const refDateStr = localDateString(ref);
+
+    const currentWeekSunday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - ref.getDay());
+    const startSunday = new Date(currentWeekSunday.getFullYear(), currentWeekSunday.getMonth(), currentWeekSunday.getDate() - (52 * 7));
+
+    const eventsByDate = new Map();
+    (eventsList || []).forEach((ev) => {
+      if (!ev.date) return;
+      if (!eventsByDate.has(ev.date)) {
+        eventsByDate.set(ev.date, []);
+      }
+      eventsByDate.get(ev.date).push(ev);
+    });
+
+    const weeks = [];
+    let totalMoments = 0;
+    let activeDays = 0;
+    let maxMomentsInDay = 0;
+    const monthLabels = [];
+    let lastMonth = -1;
+
+    for (let w = 0; w < 53; w++) {
+      const weekDays = [];
+      for (let d = 0; d < 7; d++) {
+        const offsetDays = (w * 7) + d;
+        const cellDate = new Date(startSunday.getFullYear(), startSunday.getMonth(), startSunday.getDate() + offsetDays);
+        const cellDateStr = localDateString(cellDate);
+        const isFuture = cellDateStr > refDateStr;
+        const dayEvents = isFuture ? [] : (eventsByDate.get(cellDateStr) || []);
+
+        const count = dayEvents.length;
+        const maxImpact = count > 0 ? Math.max(...dayEvents.map((e) => Number(e.impact) || 3)) : 0;
+        const intensity = isFuture ? 0 : getHeatmapIntensity(dayEvents);
+
+        if (!isFuture) {
+          totalMoments += count;
+          if (count > 0) {
+            activeDays++;
+            if (count > maxMomentsInDay) maxMomentsInDay = count;
+          }
+        }
+
+        if (d === 0 && cellDate.getMonth() !== lastMonth && !isFuture) {
+          lastMonth = cellDate.getMonth();
+          monthLabels.push({
+            colIndex: w,
+            label: formatMonth(cellDate, "short")
+          });
+        }
+
+        weekDays.push({
+          date: cellDate,
+          dateStr: cellDateStr,
+          dayOfWeek: d,
+          weekIndex: w,
+          isFuture,
+          count,
+          maxImpact,
+          intensity,
+          events: dayEvents.map((e) => ({
+            id: e.id,
+            title: e.title,
+            category: e.category,
+            sentiment: e.sentiment,
+            impact: e.impact
+          }))
+        });
+      }
+      weeks.push(weekDays);
+    }
+
+    return {
+      weeks,
+      monthLabels,
+      totalMoments,
+      activeDays,
+      maxMomentsInDay
+    };
+  }
+
+  function isTypingTarget(el) {
+    if (!el || typeof el !== "object") return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || "").toUpperCase();
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+
+  function matchKeyboardAction(key, isTyping) {
+    if (key === "Escape") return "escape";
+    if (isTyping) return null;
+
+    const lower = key.toLowerCase();
+    if (lower === "q") return "quickAdd";
+    if (lower === "n" || lower === "c") return "openModal";
+    if (key === "/") return "search";
+    if (key === "?") return "toggleHelp";
+    if (lower === "d") return "toggleTheme";
+
+    return null;
+  }
+
+  function focusQuickAdd() {
+    if (typeof switchTab === "function") switchTab("overview");
+    setTimeout(() => {
+      const input = typeof $ === "function" ? $("#quick-title") : null;
+      if (input) {
+        input.scrollIntoView({ behavior: "smooth", block: "center" });
+        input.focus();
+        input.classList.add("input-pulse");
+        setTimeout(() => input.classList.remove("input-pulse"), 1500);
+      }
+    }, 50);
+  }
+
   // CUSTOM DROPDOWNS SYSTEM (Replaces ugly native OS select popup)
   const customSelectInstances = new Map();
 
@@ -851,6 +1049,56 @@
     }).join("");
   }
 
+  let activeFlashbackEvent = null;
+  let flashbackDismissedForSession = false;
+
+  function renderFlashbackBanner() {
+    const banner = $("#flashback-banner");
+    if (!banner) return;
+    if (flashbackDismissedForSession) {
+      banner.hidden = true;
+      return;
+    }
+
+    const match = findFlashbackEvent(events);
+    if (!match) {
+      banner.hidden = true;
+      activeFlashbackEvent = null;
+      return;
+    }
+
+    activeFlashbackEvent = match;
+    const timeAgoEl = $("#flashback-time-ago");
+    const dateEl = $("#flashback-date");
+    const titleEl = $("#flashback-title");
+    if (timeAgoEl) timeAgoEl.textContent = match.timeAgoLabel || "On this day";
+    if (dateEl) dateEl.textContent = formatDate(match.date);
+    if (titleEl) titleEl.textContent = match.title;
+
+    const meta = $("#flashback-meta");
+    if (meta) {
+      const cat = categoryFor(match.category);
+      const s = SENTIMENTS[match.sentiment] || SENTIMENTS.good;
+      meta.innerHTML = `
+        <span class="event-tag" style="background:${cat.color}15;color:${cat.color};border:1px solid ${cat.color}30">${escapeHtml(cat.name)}</span>
+        ${renderImpactBadge(match.impact)}
+        <span class="event-sentiment ${s.className}">${s.icon} ${s.label}</span>
+      `;
+    }
+
+    const notesEl = $("#flashback-notes");
+    if (notesEl) {
+      if (match.notes && match.notes.trim()) {
+        notesEl.textContent = `“${match.notes.trim()}”`;
+        notesEl.hidden = false;
+      } else {
+        notesEl.hidden = true;
+      }
+    }
+
+    banner.hidden = false;
+  }
+
   function renderChart() {
     const periodValue = $("#chart-period") ? $("#chart-period").value : "6";
     const is30Days = periodValue === "30";
@@ -1060,11 +1308,116 @@
     });
   }
 
+  let activeActivityView = "chart";
+
+  function renderYearlyHeatmap() {
+    const matrixWrap = $("#heatmap-matrix-wrap");
+    if (!matrixWrap) return;
+
+    const data = getYearlyHeatmapData(events);
+    const totalEl = $("#heatmap-total-moments");
+    const activeDaysEl = $("#heatmap-active-days");
+    if (totalEl) totalEl.textContent = data.totalMoments;
+    if (activeDaysEl) activeDaysEl.textContent = data.activeDays;
+
+    const dayLabels = ["", "M", "", "W", "", "F", ""];
+    let html = `<div class="heatmap-grid">`;
+
+    data.monthLabels.forEach((m) => {
+      const col = m.colIndex + 2;
+      html += `<span class="heatmap-month-label" style="grid-column: ${col}">${escapeHtml(m.label)}</span>`;
+    });
+
+    for (let r = 0; r < 7; r++) {
+      html += `<span class="heatmap-day-label" style="grid-row: ${r + 2}">${dayLabels[r]}</span>`;
+    }
+
+    data.weeks.forEach((week, wIdx) => {
+      const col = wIdx + 2;
+      week.forEach((day, dIdx) => {
+        const row = dIdx + 2;
+        const futureClass = day.isFuture ? " is-future" : "";
+        html += `<span class="heatmap-cell lvl-${day.intensity}${futureClass}"
+          style="grid-column: ${col}; grid-row: ${row}"
+          data-date="${day.dateStr}"
+          data-count="${day.count}"
+          data-max-impact="${day.maxImpact}"
+          aria-label="${escapeHtml(day.dateStr)}: ${day.count} moments"
+        ></span>`;
+      });
+    });
+
+    html += `</div>`;
+    matrixWrap.innerHTML = html;
+
+    const cells = matrixWrap.querySelectorAll(".heatmap-cell:not(.is-future)");
+    cells.forEach((cell) => {
+      cell.addEventListener("mouseenter", () => {
+        const dateStr = cell.dataset.date;
+        const count = Number(cell.dataset.count) || 0;
+        const maxImpact = Number(cell.dataset.maxImpact) || 0;
+        const tooltip = els.chartTooltip;
+        if (!tooltip) return;
+
+        const dayEvents = events.filter((ev) => ev.date === dateStr);
+        let previewHtml = "";
+        if (dayEvents.length > 0) {
+          previewHtml = `<div class="tooltip-moments-preview">${dayEvents.slice(0, 3).map((ev) => `
+            <div class="tooltip-moment-row">
+              <span>${SENTIMENTS[ev.sentiment]?.icon || '•'}</span>
+              <span class="tooltip-moment-title">${escapeHtml(ev.title)}</span>
+              ${ev.impact ? `<span class="tooltip-moment-star">★${ev.impact}</span>` : ''}
+            </div>
+          `).join("")}${dayEvents.length > 3 ? `<div class="tooltip-moment-more">+${dayEvents.length - 3} more</div>` : ''}</div>`;
+        }
+
+        tooltip.innerHTML = `
+          <div class="chart-tooltip-header">
+            <span>${formatDate(dateStr)}</span>
+            <span class="chart-tooltip-count">${count} ${count === 1 ? "moment" : "moments"}</span>
+          </div>
+          ${maxImpact ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">Peak impact: Level ${maxImpact}</div>` : ""}
+          ${previewHtml}
+        `;
+        tooltip.hidden = false;
+
+        const rect = cell.getBoundingClientRect();
+        const containerRect = matrixWrap.getBoundingClientRect();
+        const left = rect.left - containerRect.left + (rect.width / 2);
+        const top = rect.top - containerRect.top - 8;
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+      });
+
+      cell.addEventListener("mouseleave", () => {
+        if (els.chartTooltip) els.chartTooltip.hidden = true;
+      });
+
+      cell.addEventListener("click", () => {
+        const dateStr = cell.dataset.date;
+        const count = Number(cell.dataset.count) || 0;
+        if (count > 0) {
+          switchTab("events");
+          const searchInput = $("#event-search");
+          if (searchInput) {
+            searchInput.value = dateStr;
+            filterEvents();
+          }
+        }
+      });
+    });
+  }
+
   function render() {
     renderCategoryControls();
     renderStats();
+    renderFlashbackBanner();
     renderBreakdown();
-    renderChart();
+    if (activeActivityView === "heatmap") {
+      renderYearlyHeatmap();
+    } else {
+      renderChart();
+    }
     if (activeTab === "events") {
       renderEvents();
     } else {
@@ -1627,7 +1980,41 @@
 
   const debouncedRenderEvents = debounce(renderEvents, 150);
   $("#event-search")?.addEventListener("input", debouncedRenderEvents);
-  $("#chart-period").addEventListener("change", renderChart);
+  $("#chart-period")?.addEventListener("change", renderChart);
+
+  $("#btn-view-chart")?.addEventListener("click", () => {
+    activeActivityView = "chart";
+    $("#btn-view-chart")?.classList.add("active");
+    $("#btn-view-heatmap")?.classList.remove("active");
+    $("#btn-view-chart")?.setAttribute("aria-selected", "true");
+    $("#btn-view-heatmap")?.setAttribute("aria-selected", "false");
+    const legendRow = $("#chart-legend-row");
+    const chartContainer = $("#chart-container");
+    const periodWrap = $("#chart-period-wrap");
+    const heatmapContainer = $("#heatmap-container");
+    if (legendRow) legendRow.hidden = false;
+    if (chartContainer) chartContainer.hidden = false;
+    if (periodWrap) periodWrap.hidden = false;
+    if (heatmapContainer) heatmapContainer.hidden = true;
+    renderChart();
+  });
+
+  $("#btn-view-heatmap")?.addEventListener("click", () => {
+    activeActivityView = "heatmap";
+    $("#btn-view-heatmap")?.classList.add("active");
+    $("#btn-view-chart")?.classList.remove("active");
+    $("#btn-view-heatmap")?.setAttribute("aria-selected", "true");
+    $("#btn-view-chart")?.setAttribute("aria-selected", "false");
+    const legendRow = $("#chart-legend-row");
+    const chartContainer = $("#chart-container");
+    const periodWrap = $("#chart-period-wrap");
+    const heatmapContainer = $("#heatmap-container");
+    if (legendRow) legendRow.hidden = true;
+    if (chartContainer) chartContainer.hidden = true;
+    if (periodWrap) periodWrap.hidden = true;
+    if (heatmapContainer) heatmapContainer.hidden = false;
+    renderYearlyHeatmap();
+  });
 
   els.eventList.addEventListener("click", async (e) => {
     if (e.target.closest("[data-empty-add]")) {
@@ -1716,26 +2103,119 @@
     if (e.target === $("#custom-dialog-backdrop")) closeCustomDialog();
   });
 
+  $("#flashback-close-btn")?.addEventListener("click", () => {
+    flashbackDismissedForSession = true;
+    const banner = $("#flashback-banner");
+    if (banner) banner.hidden = true;
+  });
+
+  $("#flashback-view-btn")?.addEventListener("click", () => {
+    if (activeFlashbackEvent) {
+      switchTab("events");
+      setTimeout(() => {
+        const el = $(`[data-event-id="${activeFlashbackEvent.id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("event-highlight-pulse");
+          setTimeout(() => el.classList.remove("event-highlight-pulse"), 2500);
+        }
+      }, 100);
+    }
+  });
+
+  function openShortcutsModal() {
+    const backdrop = $("#shortcuts-modal-backdrop");
+    if (!backdrop) return;
+    backdrop.hidden = false;
+    document.body.style.overflow = "hidden";
+    trapFocus(backdrop);
+  }
+
+  function closeShortcutsModal() {
+    const backdrop = $("#shortcuts-modal-backdrop");
+    if (!backdrop) return;
+    backdrop.hidden = true;
+    document.body.style.overflow = "";
+    releaseFocus();
+  }
+
+  $("#shortcuts-help-btn")?.addEventListener("click", openShortcutsModal);
+  $("#shortcuts-close")?.addEventListener("click", closeShortcutsModal);
+  $("#shortcuts-dismiss")?.addEventListener("click", closeShortcutsModal);
+  $("#shortcuts-modal-backdrop")?.addEventListener("click", (e) => {
+    if (e.target === $("#shortcuts-modal-backdrop")) closeShortcutsModal();
+  });
+
+  let lastGPressTime = 0;
+
+  if (typeof window !== "undefined") {
+    window.focusQuickAdd = focusQuickAdd;
+  }
+
   document.addEventListener("keydown", (e) => {
-    const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+    const isTyping = isTypingTarget(document.activeElement);
 
     if (e.key === "Escape") {
+      const shortcutsBackdrop = $("#shortcuts-modal-backdrop");
+      if (shortcutsBackdrop && !shortcutsBackdrop.hidden) {
+        closeShortcutsModal();
+        return;
+      }
       if (!$("#custom-dialog-backdrop").hidden) closeCustomDialog();
       else if (!els.modalBackdrop.hidden) closeModal();
       return;
     }
 
     if (!isTyping) {
-      if (e.key === "n" || e.key === "N" || e.key === "c" || e.key === "C") {
+      const action = matchKeyboardAction(e.key, isTyping);
+
+      if (action === "quickAdd") {
+        e.preventDefault();
+        focusQuickAdd();
+        return;
+      }
+      if (action === "openModal") {
         e.preventDefault();
         openModal();
-      } else if (e.key === "/") {
+        return;
+      }
+      if (action === "search") {
         e.preventDefault();
         switchTab("events");
         setTimeout(() => $("#event-search")?.focus(), 50);
-      } else if (e.key === "d" || e.key === "D") {
+        return;
+      }
+      if (action === "toggleHelp") {
+        e.preventDefault();
+        const shortcutsBackdrop = $("#shortcuts-modal-backdrop");
+        if (shortcutsBackdrop && !shortcutsBackdrop.hidden) {
+          closeShortcutsModal();
+        } else {
+          openShortcutsModal();
+        }
+        return;
+      }
+      if (action === "toggleTheme") {
         e.preventDefault();
         toggleTheme();
+        return;
+      }
+
+      if (e.key === "g" || e.key === "G") {
+        lastGPressTime = Date.now();
+        return;
+      }
+
+      if (Date.now() - lastGPressTime < 1000) {
+        if (e.key === "o" || e.key === "O") {
+          e.preventDefault();
+          switchTab("overview");
+          lastGPressTime = 0;
+        } else if (e.key === "e" || e.key === "E") {
+          e.preventDefault();
+          switchTab("events");
+          lastGPressTime = 0;
+        }
       }
     }
   });
@@ -1809,6 +2289,13 @@
       matchesImpactFilter,
       getFocusableSelectors,
       getNextFocusableIndex,
+      findFlashbackEvent,
+      formatFlashbackTimeAgo,
+      getHeatmapIntensity,
+      getYearlyHeatmapData,
+      isTypingTarget,
+      matchKeyboardAction,
+      focusQuickAdd,
       trapFocus,
       releaseFocus
     };

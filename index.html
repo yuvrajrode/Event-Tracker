@@ -57,6 +57,7 @@
           </div>
           <div class="topbar-actions">
             <span class="today-label" id="today-label"></span>
+            <button class="icon-button topbar-icon-btn" id="shortcuts-help-btn" type="button" title="Keyboard Shortcuts (Press ?)" aria-label="Keyboard Shortcuts">⌨</button>
             <button class="button button-quiet theme-toggle" id="theme-toggle" type="button" aria-pressed="false" title="Switch theme (Press D)">
               <span class="theme-toggle-icon" aria-hidden="true">☾</span>
               <span class="theme-toggle-label">Dark mode</span>
@@ -82,6 +83,26 @@
               <div class="date-pill">
                 <span class="date-sparkle">✳</span>
                 <span id="date-range-label">Your all-time activity</span>
+              </div>
+            </section>
+
+            <!-- On This Day Flashback Banner -->
+            <section class="flashback-banner" id="flashback-banner" hidden aria-label="On this day memory">
+              <div class="flashback-content">
+                <div class="flashback-top">
+                  <span class="flashback-badge"><span class="flashback-sparkle">✦</span> ON THIS DAY</span>
+                  <span class="flashback-time-ago" id="flashback-time-ago">1 year ago</span>
+                  <span class="flashback-date" id="flashback-date">Nov 22, 2025</span>
+                </div>
+                <div class="flashback-body">
+                  <h3 class="flashback-title" id="flashback-title"></h3>
+                  <div class="flashback-meta" id="flashback-meta"></div>
+                  <p class="flashback-notes" id="flashback-notes" hidden></p>
+                </div>
+              </div>
+              <div class="flashback-actions">
+                <button type="button" class="button button-quiet flashback-view-btn" id="flashback-view-btn">View in timeline →</button>
+                <button type="button" class="icon-button flashback-close-btn" id="flashback-close-btn" aria-label="Dismiss memory">×</button>
               </div>
             </section>
 
@@ -194,18 +215,24 @@
                     <h2>Your activity</h2>
                     <p>See how your moments add up over time.</p>
                   </div>
-                  <div class="select-wrap">
-                    <select id="chart-period" aria-label="Activity chart period">
-                      <option value="30">Last 30 days</option>
-                      <option value="6">Last 6 months</option>
-                      <option value="12">Last 12 months</option>
-                    </select>
-                    <span class="select-chevron" aria-hidden="true">
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </span>
+                  <div class="activity-view-toggles">
+                    <div class="segmented-control" role="tablist" aria-label="Activity view mode">
+                      <button type="button" class="segmented-btn active" id="btn-view-chart" role="tab" aria-selected="true">Trend</button>
+                      <button type="button" class="segmented-btn" id="btn-view-heatmap" role="tab" aria-selected="false">365-Day Heatmap</button>
+                    </div>
+                    <div class="select-wrap" id="chart-period-wrap">
+                      <select id="chart-period" aria-label="Activity chart period">
+                        <option value="30">Last 30 days</option>
+                        <option value="6">Last 6 months</option>
+                        <option value="12">Last 12 months</option>
+                      </select>
+                      <span class="select-chevron" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div class="chart-legend-row">
+                <div class="chart-legend-row" id="chart-legend-row">
                   <div class="chart-legend">
                     <span class="legend-dot"></span>
                     <span class="legend-text">Moments logged</span>
@@ -224,6 +251,28 @@
                   </div>
                   <div class="chart-tooltip" id="chart-tooltip" hidden></div>
                   <svg id="activity-chart" role="img" aria-label="Events logged by month"></svg>
+                </div>
+
+                <!-- 365-Day Activity Heatmap -->
+                <div class="heatmap-container" id="heatmap-container" hidden>
+                  <div class="heatmap-header">
+                    <div class="heatmap-stats">
+                      <span class="heatmap-stat-pill"><strong id="heatmap-total-moments">0</strong> moments this year</span>
+                      <span class="heatmap-stat-pill"><strong id="heatmap-active-days">0</strong> active days</span>
+                    </div>
+                    <div class="heatmap-legend">
+                      <span>Less</span>
+                      <span class="heatmap-cell lvl-0" aria-label="0 events"></span>
+                      <span class="heatmap-cell lvl-1" aria-label="Low activity"></span>
+                      <span class="heatmap-cell lvl-2" aria-label="Medium activity"></span>
+                      <span class="heatmap-cell lvl-3" aria-label="High activity"></span>
+                      <span class="heatmap-cell lvl-4" aria-label="Peak milestone"></span>
+                      <span>More</span>
+                    </div>
+                  </div>
+                  <div class="heatmap-scroll-wrap">
+                    <div class="heatmap-matrix-wrap" id="heatmap-matrix-wrap"></div>
+                  </div>
                 </div>
               </article>
 
@@ -425,6 +474,32 @@
           <button class="button button-quiet" id="custom-dialog-cancel" type="button">Cancel</button>
           <button class="button button-quiet" id="custom-dialog-secondary" type="button" hidden>Secondary</button>
           <button class="button button-primary" id="custom-dialog-confirm" type="button">Confirm</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal-backdrop" id="shortcuts-modal-backdrop" hidden>
+      <section class="modal shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">QUICK ACCESS</p>
+            <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
+          </div>
+          <button class="icon-button close-button" id="shortcuts-close" aria-label="Close shortcuts dialog">×</button>
+        </div>
+        <div class="shortcuts-list">
+          <div class="shortcut-item"><span class="shortcut-desc">Focus Quick Log bar</span><kbd>Q</kbd></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Open New Event modal</span><kbd>N</kbd></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Search moments</span><kbd>/</kbd></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Switch to Overview tab</span><span class="kbd-group"><kbd>G</kbd> then <kbd>O</kbd></span></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Switch to Events timeline</span><span class="kbd-group"><kbd>G</kbd> then <kbd>E</kbd></span></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Toggle Dark / Light mode</span><kbd>D</kbd></div>
+          <div class="shortcut-item"><span class="shortcut-desc">Show shortcuts help</span><kbd>?</kbd></div>
+          <div class="shortcut-item highlight"><span class="shortcut-desc">Global Quick-Log (Desktop)</span><span class="kbd-group"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd></span></div>
+        </div>
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="button button-quiet" type="button" id="shortcuts-dismiss">Got it</button>
         </div>
       </section>
     </div>

@@ -1,6 +1,6 @@
 [package]
 name = "gather"
-version = "1.0.5"
+version = "2.0.0"
 edition = "2021"
 description = "Gather — Personal Moment & Event Tracker"
 authors = ["Yuvraj Rode"]
@@ -9,6 +9,14 @@ authors = ["Yuvraj Rode"]
 tao = "0.37.2"
 wry = "0.57.2"
 tiny_http = "0.12.0"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+]
 
 [build-dependencies]
 winres = "0.1.12"

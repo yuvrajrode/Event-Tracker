@@ -4,7 +4,7 @@ use std::thread;
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoopBuilder},
     window::WindowBuilder,
 };
 use tiny_http::{Header, Response, Server, StatusCode};
@@ -14,6 +14,11 @@ const HTML: &str = include_str!("../index.html");
 const CSS: &str = include_str!("../styles.css");
 const JS: &str = include_str!("../app.js");
 const ICON: &str = include_str!("../icon.svg");
+
+#[derive(Debug, Clone, Copy)]
+enum CustomEvent {
+    GlobalQuickAdd,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Embedded background HTTP server to guarantee full localStorage & web API access
@@ -58,8 +63,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // 2. Native Desktop Window
-    let event_loop = EventLoop::new();
+    // 2. Native Desktop Window & Event Loop with Custom Events
+    let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event().build();
 
     let window = WindowBuilder::new()
         .with_title("Gather — Personal Moment & Event Tracker")
@@ -75,19 +80,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut web_context = WebContext::new(Some(data_dir));
 
-    let _webview = WebViewBuilder::new_with_web_context(&mut web_context)
+    let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(&app_url)
         .build(&window)?;
+
+    // 4. Windows Global Hotkey Listener Thread (Ctrl + Shift + G)
+    #[cfg(target_os = "windows")]
+    {
+        let proxy = event_loop.create_proxy();
+        thread::spawn(move || unsafe {
+            use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_CONTROL, MOD_SHIFT};
+            use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
+
+            // Register Ctrl + Shift + G (0x47 is ASCII for 'G')
+            let _ = RegisterHotKey(None, 101, MOD_CONTROL | MOD_SHIFT, 0x47);
+
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                if msg.message == WM_HOTKEY && msg.wParam == 101 {
+                    let _ = proxy.send_event(CustomEvent::GlobalQuickAdd);
+                }
+            }
+        });
+    }
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = event
-        {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::UserEvent(CustomEvent::GlobalQuickAdd) => {
+                window.set_visible(true);
+                window.set_minimized(false);
+                window.set_focus();
+                let _ = webview.evaluate_script("window.focusQuickAdd && window.focusQuickAdd();");
+            }
+            _ => {}
         }
     });
 }
